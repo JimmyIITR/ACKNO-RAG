@@ -1,20 +1,13 @@
 from langchain_core.runnables import  RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
 from langchain_core.output_parsers import StrOutputParser
-from langchain_community.graphs import Neo4jGraph
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.chat_models import ChatOllama
 from langchain_experimental.graph_transformers import LLMGraphTransformer
-from neo4j import GraphDatabase
-from yfiles_jupyter_graphs import GraphWidget
 from langchain_community.vectorstores import Neo4jVector
 from langchain_community.document_loaders import TextLoader
-from langchain_community.vectorstores.neo4j_vector import remove_lucene_chars
 from langchain_ollama import OllamaEmbeddings
-import os
+from langchain_core.runnables import RunnableLambda
 from langchain_experimental.llms.ollama_functions import OllamaFunctions
-from neo4j import  Driver
 from dataBase import queries
 import prompts
 
@@ -56,8 +49,8 @@ def embeddings():
     vectorRetriver = vecIndex.as_retriever()
     return vectorRetriver
 
-def fullRetriver(question: str, vectorRetriver):
-    graphData = queries.graphRetriever(question)
+def fullRetriver(question: str, vectorRetriver, entityChain, graph):
+    graphData = queries.graphRetriever(question, entityChain, graph)
     vectorData = [el.page_content for el in vectorRetriver.invoke(question)]
     finalData = f"""Graph data:
                     {graphData}
@@ -90,14 +83,19 @@ print(queries.graphRetriever(userQuery, entityChain=entityChain, graph=graph))
 vectorRetriver = embeddings()
 
 prompt = ChatPromptTemplate.from_template(prompts.template)
-contextInput = fullRetriver(question=userQueryF1, vectorRetriver=vectorRetriver)
+contextInput = fullRetriver(question=userQueryF1, vectorRetriver=vectorRetriver, entityChain=entityChain, graph=graph)
 print(contextInput)
 print("\n\n\n")
 
 chain = (
         {
-            "context": contextInput,
-            "question": RunnablePassthrough(),
+        "context": RunnableLambda(lambda question: fullRetriver(
+            question=question,
+            vectorRetriver=vectorRetriver,
+            entityChain=entityChain,
+            graph=graph
+        )),
+        "question": RunnablePassthrough() 
         }
     | prompt
     | llm
