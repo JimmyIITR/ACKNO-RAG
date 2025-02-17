@@ -2,3 +2,5 @@ myenv
 packages
 .env
 code/dataBase/Neo4j-a9bf1f11-Created-2025-02-11.txt
+code/__pycache__
+code/dataBase/__pycache__

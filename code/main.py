@@ -1,4 +1,4 @@
-from langchain_core.runnables import  RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -15,95 +15,123 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-def dataLoader(dataPath):
-    loader = TextLoader(file_path=dataPath,autodetect_encoding=True)
-    docs = loader.load()
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=250, chunk_overlap=24)
-    documents = text_splitter.split_documents(documents=docs)
-    return documents
+# Configuration Constants
+DATA_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/data/dummytext.txt"
+LLM_MODEL = "llama3.1"
+EMBEDDINGS_MODEL = "mxbai-embed-large"
 
+def loadData(dataPath):
+    """Load and split documents from specified path"""
+    textLoader = TextLoader(file_path=dataPath, autodetect_encoding=True)
+    rawDocs = textLoader.load()
+    textSplitter = RecursiveCharacterTextSplitter(
+        chunk_size=250, 
+        chunk_overlap=24
+    )
+    return textSplitter.split_documents(documents=rawDocs)
 
-def LLM(docs):
-    llm = OllamaFunctions(model="llama3.1", temperature=0, format="json")
-    llm_transformer = LLMGraphTransformer(llm=llm)
-    graphDoc = llm_transformer.convert_to_graph_documents(docs)
-    return llm,graphDoc
+def processLLM(docs):
+    """Process documents to create LLM instance and graph documents"""
+    llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
+    graphTransformer = LLMGraphTransformer(llm=llm)
+    graphDocs = graphTransformer.convert_to_graph_documents(docs)
+    return llm, graphDocs
 
-def addToGraph(graph, graphDoc):
+def addToGraph(graph, graphDocs):
+    """Add processed documents to Neo4j graph"""
     graph.add_graph_documents(
-        graphDoc,
+        graphDocs,
         baseEntityLabel=True,
         include_source=True
     )
-    return
 
-def embeddings():
-    embeddings = OllamaEmbeddings(model="mxbai-embed-large")
-    vecIndex = Neo4jVector.from_existing_graph(
-        embeddings,
+def initializeEmbeddings():
+    """Initialize and return vector retriever"""
+    embeddingModel = OllamaEmbeddings(model=EMBEDDINGS_MODEL)
+    vectorIndex = Neo4jVector.from_existing_graph(
+        embedding=embeddingModel,
         search_type="hybrid",
         node_label="Document",
         text_node_properties=["text"],
         embedding_node_property="embedding"
     )
-    vectorRetriver = vecIndex.as_retriever()
-    return vectorRetriver
+    return vectorIndex.as_retriever()
 
-def fullRetriver(question: str, vectorRetriver, entityChain, graph):
+def retrieveContext(question, vectorRetriever, entityChain, graph):
+    """Retrieve combined context from graph and vector store"""
     graphData = queries.graphRetriever(question, entityChain, graph)
-    vectorData = [el.page_content for el in vectorRetriver.invoke(question)]
-    finalData = f"""Graph data:
-                    {graphData}
-                    vector data:
-                    {"#Document ". join(vectorData)}
-                    """
-    return finalData
+    vectorResults = [doc.page_content for doc in vectorRetriever.invoke(question)]
+    
+    return f"""Graph Data:
+{graphData}
 
+Vector Data:
+{"#Document ".join(vectorResults)}"""
 
-dataPath = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/data/dummytext.txt"
-userQuery = "Who are Nonna Lucia and Giovanni Caruso?"
-userQueryT1 = "Who is Nonna Lucia?"
-userQueryF1 = "Who is Nonna Lucia? Did she teach anyone about restaurants or cooking?"
-
-graph = queries.neo4j()
-docs = dataLoader(dataPath=dataPath)
-llm,graphDoc = LLM(docs)
-print(graphDoc[0])
-addToGraph(graph,graphDoc)
-driver = queries.driveOpen()
-try:
-    queries.createIndex(driver=driver)
-except:
-    pass
-
-queries.driveClose(driver=driver)
-entityChain = llm.with_structured_output(prompts.Entities)
-entityChain.invoke(userQuery)
-print(queries.graphRetriever(userQuery, entityChain=entityChain, graph=graph))
-vectorRetriver = embeddings()
-
-prompt = ChatPromptTemplate.from_template(prompts.template)
-contextInput = fullRetriver(question=userQueryF1, vectorRetriver=vectorRetriver, entityChain=entityChain, graph=graph)
-print(contextInput)
-print("\n\n\n")
-
-chain = (
+def setupAnswerChain():
+    """Set up and return the question answering chain"""
+    graph = queries.neo4j()
+    llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
+    entityChain = llm.with_structured_output(prompts.Entities)
+    vectorRetriever = initializeEmbeddings()
+    
+    promptTemplate = ChatPromptTemplate.from_template(prompts.template)
+    
+    return (
         {
-        "context": RunnableLambda(lambda question: fullRetriver(
-            question=question,
-            vectorRetriver=vectorRetriver,
-            entityChain=entityChain,
-            graph=graph
-        )),
-        "question": RunnablePassthrough() 
+            "context": RunnableLambda(
+                lambda question: retrieveContext(
+                    question=question,
+                    vectorRetriever=vectorRetriever,
+                    entityChain=entityChain,
+                    graph=graph
+                )
+            ),
+            "question": RunnablePassthrough() 
         }
-    | prompt
-    | llm
-    | StrOutputParser()
-)
-answer = chain.invoke(userQueryF1)
+        | promptTemplate
+        | llm
+        | StrOutputParser()
+    )
 
-print(answer)
+def handleDataIngestion():
+    """Handle the data loading and graph population process"""
+    print("Loading and processing data...")
+    documents = loadData(DATA_PATH)
+    llmModel, graphDocuments = processLLM(documents)
+    
+    graph = queries.neo4j()
+    addToGraph(graph, graphDocuments)
+    
+    driver = queries.driveOpen()
+    try:
+        queries.createIndex(driver)
+    except Exception as e:
+        print(f"Index creation skipped: {str(e)}")
+    finally:
+        queries.driveClose(driver)
+    print("Data ingestion completed successfully!\n")
 
+def queryInterface(answerChain):
+    """Handle user queries in a loop"""
+    print("\nQuery system ready. Type 'exit' to quit.\n")
+    while True:
+        userInput = input("Enter your question: ").strip()
+        if userInput.lower() in ('exit', 'quit'):
+            break
+        if not userInput:
+            continue
+            
+        response = answerChain.invoke(userInput)
+        print("\nResponse:")
+        print(response)
+        print("\n" + "="*50 + "\n")
 
-
+if __name__ == "__main__":
+    initialChoice = input("Initialize new data in graph? (yes/no): ").lower().strip()
+    if initialChoice == 'yes':
+        handleDataIngestion()
+    
+    qaChain = setupAnswerChain()
+    queryInterface(qaChain)
+    print("Session terminated.")
