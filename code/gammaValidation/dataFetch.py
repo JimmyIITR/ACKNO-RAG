@@ -51,13 +51,11 @@ def getCrossAndSelfURLsWithClaims(k) -> Tuple[List[Tuple[str, str]], List[Tuple[
     result = []
     
     for claim_data in data:
-        # Skip if missing essential data
         if not (claim_data.get('claim') and claim_data.get('fact_checking_article')):
             continue
             
         related_articles = []
         for other_claim in data:
-            # Skip the current claim and claims without fact-checking articles
             if (other_claim['claim'] != claim_data['claim'] and 
                 other_claim.get('fact_checking_article') and 
                 other_claim['fact_checking_article'] != claim_data['fact_checking_article']):
