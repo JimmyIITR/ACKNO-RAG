@@ -1,6 +1,3 @@
-from BM25GammaValidation import compute_bm25_scores
-from SBERTGammaValidation import computeSbertScores
-from TFIDFGammaValidation import computeTfIdfScores
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
@@ -9,13 +6,29 @@ import re
 import pandas as pd
 from collections import defaultdict
 from dataFetch import getCrossAndSelfURLsWithClaims
+from BM25GammaValidation import compute_bm25_scores
+from TFIDFGammaValidation import computeTfIdfScores
+from SBERTGammaValidation import computeSbertScores
 from sentence_transformers import SentenceTransformer
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import time
 
 nltk.download('punkt')
-results = defaultdict(dict)
-def fetchArticleText(url):
+
+RESULT_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/results/gamma"
+
+def getSession():
+    session = requests.Session()
+    retries = Retry(total=5, backoff_factor=2, status_forcelist=[429, 500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retries)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+def fetchArticleText(url, session):
     try:
-        response = requests.get(url, timeout=10)
+        response = session.get(url, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, 'html.parser')
             for tag in soup(["script", "style"]):
@@ -33,9 +46,10 @@ def tokenize(text):
     return nltk.word_tokenize(text)
 
 def main():
-    sbertModel = SentenceTransformer('all-MiniLM-L6-v2') #user all-mpnet-base-v2 insted infuture
+    sbertModel = SentenceTransformer('all-MiniLM-L6-v2')  # (Consider all-mpnet-base-v2 in the future)
+    session = getSession()  # Create a session with retries
     columns = []
-    for i in range(1, 10):
+    for i in range(2, 10):
         columns.extend([
             f'BM25_{i}_first',
             f'BM25_{i}_max',
@@ -47,53 +61,44 @@ def main():
     
     # Create DataFrame
     df = pd.DataFrame(columns=['Claim'] + columns)
-    for i in range(1,10):
+    
+    for i in range(3, 6):
         dataList = getCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
         for data in dataList:
             claim = data["main_claim"]["text"]
             if claim not in df['Claim'].values:
                 new_row = {'Claim': claim}
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-            row_index = df.index[df['Claim'] == claim].tolist()[0]
+            rowIndex = df.index[df['Claim'] == claim].tolist()[0]
+            
             urlSelf = data["main_claim"]["fact_checking_article"]
             urlOther = [data["related_articles"][j]["fact_checking_article"] for j in range(i)]
             
             documents = []
-            textSelf = fetchArticleText(urlSelf)
+            textSelf = fetchArticleText(urlSelf, session)
             documents.append(textSelf)
+            # Delay between requests to avoid rate limiting
+            time.sleep(2)
             for url in urlOther:
-                textOther = fetchArticleText(url)
+                textOther = fetchArticleText(url, session)
                 documents.append(textOther)
+                time.sleep(2)
             
             scoresBM25 = compute_bm25_scores(claim, documents)
             scoresTFIDF = computeTfIdfScores(claim, documents)
             scoresSBERT = computeSbertScores(claim, documents, sbertModel)
-            
-            # if len(scoresBM25) > 0:
-            #     print("BM25@{i}", scoresBM25[0], max(scoresBM25[1:i]))
-            # else:
-            #     print("No scores computed for BM25")
-            # if len(scoresSBERT) > 0:
-            #     print("SBERT@{i}", scoresSBERT[0], max(scoresSBERT[1:i]))
-            # else:
-            #     print("No scores computed for SBERT")
-            # if len(scoresTFIDF) > 0:
-            #     print("TFIDF@{i}", scoresTFIDF[0], max(scoresTFIDF[1:i]))
-            # else:
-            #     print("No scores computed for TFIDF")
+            print("BM25->",scoresBM25, "\n TFIDF->",scoresTFIDF, "\n SBERT->",scoresSBERT, "\n")
             if len(scoresBM25) > 0:
-                df.at[row_index, f'BM25_{i}_first'] = scoresBM25[0]
-                df.at[row_index, f'BM25_{i}_max'] = max(scoresBM25[1:i+1])
-            
+                df.at[rowIndex, f'BM25_{i}_first'] = scoresBM25[0]
+                df.at[rowIndex, f'BM25_{i}_max'] = max(scoresBM25[1:i+1])
             if len(scoresSBERT) > 0:
-                df.at[row_index, f'SBERT_{i}_first'] = scoresSBERT[0]
-                df.at[row_index, f'SBERT_{i}_max'] = max(scoresSBERT[1:i+1])
-            
+                df.at[rowIndex, f'SBERT_{i}_first'] = scoresSBERT[0]
+                df.at[rowIndex, f'SBERT_{i}_max'] = max(scoresSBERT[1:i+1])
             if len(scoresTFIDF) > 0:
-                df.at[row_index, f'TFIDF_{i}_first'] = scoresTFIDF[0]
-                df.at[row_index, f'TFIDF_{i}_max'] = max(scoresTFIDF[1:i+1])
-
-    df.to_excel('validation_results.xlsx', index=False)
+                df.at[rowIndex, f'TFIDF_{i}_first'] = scoresTFIDF[0]
+                df.at[rowIndex, f'TFIDF_{i}_max'] = max(scoresTFIDF[1:i+1])
+    
+    df.to_excel(f"{RESULT_PATH}/validation_results.xlsx", index=False)
     print("Results saved to validation_results.xlsx")
 
 if __name__ == "__main__":
