@@ -5,7 +5,7 @@ import nltk
 import re
 import pandas as pd
 from collections import defaultdict
-from dataFetch import getCrossAndSelfURLsWithClaims
+from dataFetch import getCrossAndSelfURLsWithClaims, getTestDataCrossAndSelfURLsWithClaims
 from BM25GammaValidation import compute_bm25_scores
 from TFIDFGammaValidation import computeTfIdfScores
 from SBERTGammaValidation import computeSbertScores
@@ -62,7 +62,7 @@ def main():
     # Create DataFrame
     df = pd.DataFrame(columns=['Claim'] + columns)
     
-    for i in range(3, 6):
+    for i in range(6, 8):
         dataList = getCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
         for data in dataList:
             claim = data["main_claim"]["text"]
@@ -98,8 +98,63 @@ def main():
                 df.at[rowIndex, f'TFIDF_{i}_first'] = scoresTFIDF[0]
                 df.at[rowIndex, f'TFIDF_{i}_max'] = max(scoresTFIDF[1:i+1])
     
-    df.to_excel(f"{RESULT_PATH}/validation_results.xlsx", index=False)
+    df.to_excel(f"{RESULT_PATH}/validation_results(3).xlsx", index=False)
     print("Results saved to validation_results.xlsx")
+
+
+def testMain():
+    sbertModel = SentenceTransformer('all-MiniLM-L6-v2')  # (Consider all-mpnet-base-v2 in the future)
+    session = getSession()  
+    columns = []
+    for i in range(5, 5):
+        columns.extend([
+            f'BM25_{i}_first',
+            f'BM25_{i}_max',
+            f'SBERT_{i}_first',
+            f'SBERT_{i}_max',
+            f'TFIDF_{i}_first',
+            f'TFIDF_{i}_max'
+        ])
+    
+    df = pd.DataFrame(columns=['Claim'] + columns)
+    
+    for i in range(5, 5):
+        dataList = getTestDataCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
+        for data in dataList:
+            claim = data["main_claim"]["text"]
+            if claim not in df['Claim'].values:
+                new_row = {'Claim': claim}
+                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            rowIndex = df.index[df['Claim'] == claim].tolist()[0]
+            
+            urlSelf = data["main_claim"]["fact_checking_article"]
+            urlOther = [data["related_articles"][j]["fact_checking_article"] for j in range(i)]
+            
+            documents = []
+            textSelf = fetchArticleText(urlSelf, session)
+            documents.append(textSelf)
+            time.sleep(2)
+            for url in urlOther:
+                textOther = fetchArticleText(url, session)
+                documents.append(textOther)
+                time.sleep(2)
+            
+            scoresBM25 = compute_bm25_scores(claim, documents)
+            scoresTFIDF = computeTfIdfScores(claim, documents)
+            scoresSBERT = computeSbertScores(claim, documents, sbertModel)
+            print("BM25->",scoresBM25, "\n TFIDF->",scoresTFIDF, "\n SBERT->",scoresSBERT, "\n")
+            if len(scoresBM25) > 0:
+                df.at[rowIndex, f'BM25_{i}_first'] = scoresBM25[0]
+                df.at[rowIndex, f'BM25_{i}_max'] = max(scoresBM25[1:i+1])
+            if len(scoresSBERT) > 0:
+                df.at[rowIndex, f'SBERT_{i}_first'] = scoresSBERT[0]
+                df.at[rowIndex, f'SBERT_{i}_max'] = max(scoresSBERT[1:i+1])
+            if len(scoresTFIDF) > 0:
+                df.at[rowIndex, f'TFIDF_{i}_first'] = scoresTFIDF[0]
+                df.at[rowIndex, f'TFIDF_{i}_max'] = max(scoresTFIDF[1:i+1])
+    
+    df.to_excel(f"{RESULT_PATH}/testdata_results.xlsx", index=False)
+    print("Results saved to testdata_results.xlsx")
 
 if __name__ == "__main__":
     main()
