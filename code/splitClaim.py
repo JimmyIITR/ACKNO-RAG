@@ -89,7 +89,7 @@ if __name__ == "__main__":
         "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
     )
     p = (
-        "Trump Administration claimed songwriter Billie Eilish Is Destroying Our Country In Leaked Documents"
+        "Donald Trump has said he loves war. including with nukes."
     )
     
     processParagraph(testParagraph)

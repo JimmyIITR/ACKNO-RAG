@@ -16,6 +16,8 @@ def driveOpen():
     return driver
 
 def createFulltextIndex(tx):
+    tx.run("MATCH (n) DETACH DELETE n")
+    tx.run("DROP INDEX fulltext_entity_id IF EXISTS")
     query = '''
     CREATE FULLTEXT INDEX `fulltext_entity_id` 
     FOR (n:__Entity__) 

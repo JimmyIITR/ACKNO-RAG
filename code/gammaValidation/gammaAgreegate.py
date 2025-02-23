@@ -62,7 +62,7 @@ def main():
     # Create DataFrame
     df = pd.DataFrame(columns=['Claim'] + columns)
     
-    for i in range(6, 8):
+    for i in range(8, 11):
         dataList = getCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
         for data in dataList:
             claim = data["main_claim"]["text"]
@@ -98,7 +98,7 @@ def main():
                 df.at[rowIndex, f'TFIDF_{i}_first'] = scoresTFIDF[0]
                 df.at[rowIndex, f'TFIDF_{i}_max'] = max(scoresTFIDF[1:i+1])
     
-    df.to_excel(f"{RESULT_PATH}/validation_results(3).xlsx", index=False)
+    df.to_excel(f"{RESULT_PATH}/validation_results(4).xlsx", index=False)
     print("Results saved to validation_results.xlsx")
 
 
