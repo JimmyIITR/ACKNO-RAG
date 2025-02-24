@@ -106,7 +106,7 @@ def testMain():
     sbertModel = SentenceTransformer('all-MiniLM-L6-v2')  # (Consider all-mpnet-base-v2 in the future)
     session = getSession()  
     columns = []
-    for i in range(5, 5):
+    for i in range(7, 9):
         columns.extend([
             f'BM25_{i}_first',
             f'BM25_{i}_max',
@@ -118,8 +118,9 @@ def testMain():
     
     df = pd.DataFrame(columns=['Claim'] + columns)
     
-    for i in range(5, 5):
+    for i in range(7, 9):
         dataList = getTestDataCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
+        print(dataList)
         for data in dataList:
             claim = data["main_claim"]["text"]
             if claim not in df['Claim'].values:
@@ -157,4 +158,4 @@ def testMain():
     print("Results saved to testdata_results.xlsx")
 
 if __name__ == "__main__":
-    main()
+    testMain()

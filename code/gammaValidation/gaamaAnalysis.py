@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import MinMaxScaler
 
-DATAPATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/results/gamma/validation_results(1).xlsx"
+DATAPATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/results/gamma/validation_results(4).xlsx"
 df = pd.read_excel(f"{DATAPATH}") 
 
 # TESTDATAPATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/results/gamma/testdata_results.xlsx"
@@ -63,8 +63,8 @@ def thresholdNormalized(model, kValue, score):
     return thresholdNormalized
 
 if __name__ == "__main__":
-    model = "BM25"
-    kValue = "2"
+    model = "SBERT"
+    kValue = "10"
     print(model, kValue)
     tScore = getScore(model, kValue)
     # accuracy = thresholdNormalized(model, kValue, tScore)
