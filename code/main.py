@@ -15,7 +15,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Configuration Constants
 DATA_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/data/dummytext.txt"
 LLM_MODEL = "llama3.1"
 EMBEDDINGS_MODEL = "mxbai-embed-large"
