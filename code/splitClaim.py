@@ -2,34 +2,15 @@ import json
 import re
 import ollama
 from typing import List
+from prompts import getSplitClaimPrompt
 
 LLM_MODEL = "llama3.1"
 
 def generateAtomicClaims(paragraph: str) -> List[str]:
-    """
-    Improved version using explicit JSON formatting and enhanced coreference resolution
-    """
-    systemPrompt = """You are a fact extraction expert. Analyze the given text and split it into atomic claims following these rules:
-1. Each claim must be a complete, standalone fact
-2. Resolve all pronouns (he/she/they/it) to their explicit references
-3. Separate compound sentences into individual facts
-4. Maintain original meaning and entities
-5. Output MUST be valid JSON format: {"claims": ["claim1", "claim2"]}
-
-Example Input: "John works at Google and he developed their AI system"
-Example Output: {"claims": ["John works at Google", "John developed Google's AI system"]}
-
-Now process this:"""
-    
-    userPrompt = f"{paragraph}\n\nONLY OUTPUT JSON, NO MARKDOWN, NO EXTRA TEXT"
-
     try:
         response = ollama.chat(
             model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": systemPrompt},
-                {"role": "user", "content": userPrompt}
-            ],
+            messages=getSplitClaimPrompt(paragraph=paragraph),
             options={"temperature": 0.2}, 
             format="json"
         )
@@ -89,7 +70,7 @@ if __name__ == "__main__":
         "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
     )
     p = (
-        "Donald Trump has said he loves war. including with nukes."
+        "Donald Trump has said he loves war. 'including with nukes'."
     )
     
-    processParagraph(testParagraph)
+    processParagraph(p)
