@@ -9,3 +9,6 @@ Ollama is used for intallation of model on local computer, with which we are dow
   ```
   ollama run deepseek-r1:1.5b
   ```
+
+
+Completed algorithm studies (Louvain, Leiden and others).
