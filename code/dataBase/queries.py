@@ -15,9 +15,13 @@ def driveOpen():
                               auth = (os.environ["NEO4J_USERNAME"],os.environ["NEO4J_PASSWORD"]))
     return driver
 
-def createFulltextIndex(tx):
+def clearDatabase(tx):
     tx.run("MATCH (n) DETACH DELETE n")
+
+def dropFulltextIndex(tx):
     tx.run("DROP INDEX fulltext_entity_id IF EXISTS")
+
+def createFulltextIndex(tx):
     query = '''
     CREATE FULLTEXT INDEX `fulltext_entity_id` 
     FOR (n:__Entity__) 
@@ -25,11 +29,30 @@ def createFulltextIndex(tx):
     '''
     tx.run(query)
 
-# Function to execute the query
 def createIndex(driver):
+    with driver.session() as session:
+        session.execute_write(clearDatabase)
+    with driver.session() as session:
+        session.execute_write(dropFulltextIndex)
     with driver.session() as session:
         session.execute_write(createFulltextIndex)
         print("Fulltext index created successfully.")
+
+# def createFulltextIndex(tx):
+#     tx.run("MATCH (n) DETACH DELETE n")
+#     tx.run("DROP INDEX fulltext_entity_id IF EXISTS")
+#     query = '''
+#     CREATE FULLTEXT INDEX `fulltext_entity_id` 
+#     FOR (n:__Entity__) 
+#     ON EACH [n.id];
+#     '''
+#     tx.run(query)
+
+# Function to execute the query
+# def createIndex(driver):
+#     with driver.session() as session:
+#         session.execute_write(createFulltextIndex)
+#         print("Fulltext index created successfully.")
 
 
 def driveClose(driver):
