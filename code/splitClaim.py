@@ -4,7 +4,7 @@ import ollama
 from typing import List
 from prompts import getSplitClaimPrompt
 
-LLM_MODEL = "llama3.1"
+LLM_MODEL = "deepseek-r1:7b"
 
 def generateAtomicClaims(paragraph: str) -> List[str]:
     try:
@@ -70,7 +70,7 @@ if __name__ == "__main__":
         "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
     )
     p = (
-        "Donald Trump has said he loves war. 'including with nukes'."
+        "Donald Trump has said he loves war, which includes nukes."
     )
     
     processParagraph(p)
