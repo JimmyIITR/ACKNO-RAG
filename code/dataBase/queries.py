@@ -1,4 +1,5 @@
-from langchain_community.graphs import Neo4jGraph
+
+from langchain_neo4j import Neo4jGraph
 from neo4j import GraphDatabase
 import os
 from dotenv import load_dotenv
@@ -6,8 +7,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def neo4j():
-    graph = Neo4jGraph()
-    return graph
+    return Neo4jGraph(
+        url=os.environ["NEO4J_URI"],
+        username=os.environ["NEO4J_USERNAME"],
+        password=os.environ["NEO4J_PASSWORD"]
+    )
 
 
 def driveOpen():

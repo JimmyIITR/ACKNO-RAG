@@ -4,7 +4,7 @@ import ollama
 from typing import List
 from prompts import getSplitClaimPrompt
 
-LLM_MODEL = "deepseek-r1:7b"
+LLM_MODEL = "mistral:latest"
 
 def generateAtomicClaims(paragraph: str) -> List[str]:
     try:

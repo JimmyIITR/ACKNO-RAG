@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATA_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/data/dummytext.txt"
-LLM_MODEL = "llama3.1"
+LLM_MODEL = "mistral:latest"
 EMBEDDINGS_MODEL = "mxbai-embed-large"
 
 def loadData(dataPath):
