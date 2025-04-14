@@ -60,13 +60,13 @@ def retrieveContext(question, vectorRetriever, entityChain, graph):
     """Retrieve combined context from graph and vector store"""
     graphData = queries.graphRetriever(question, entityChain, graph)
     vectorResults = [doc.page_content for doc in vectorRetriever.invoke(question)]
-    
-    return f"""Graph Data:
+    res = f"""Graph Data:
 {graphData}
 
 Vector Data:
 {"#Document ".join(vectorResults)}"""
-
+    print(res)
+    return res
 def setupAnswerChain():
     """Set up and return the question answering chain"""
     graph = queries.neo4j()
@@ -75,7 +75,6 @@ def setupAnswerChain():
     vectorRetriever = initializeEmbeddings()
     
     promptTemplate = ChatPromptTemplate.from_template(prompts.template)
-    
     return (
         {
             "context": RunnableLambda(
@@ -100,11 +99,23 @@ def handleDataIngestion():
     llmModel, graphDocuments = processLLM(documents)
     
     graph = queries.neo4j()
+    #try to clean whole data first
+    driver = queries.driveOpen()
+    try:
+        queries.clearDataWithIndex(driver)
+        print(f"Database Cleaned Successfuly.")
+    except Exception as e:
+         print(f"Data Clean error : {str(e)}")
+    finally:
+        queries.driveClose(driver)
+    #add data to database
     addToGraph(graph, graphDocuments)
-    
+    print("Data added to Graph")
+    #create index of the database
     driver = queries.driveOpen()
     try:
         queries.createIndex(driver)
+        print("Indexing created successfully.")
     except Exception as e:
         print(f"Index creation skipped: {str(e)}")
     finally:

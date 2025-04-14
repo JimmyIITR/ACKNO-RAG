@@ -33,14 +33,17 @@ def createFulltextIndex(tx):
     '''
     tx.run(query)
 
-def createIndex(driver):
+def clearDataWithIndex(driver):
     with driver.session() as session:
         session.execute_write(clearDatabase)
     with driver.session() as session:
         session.execute_write(dropFulltextIndex)
+
+def createIndex(driver):
     with driver.session() as session:
         session.execute_write(createFulltextIndex)
         print("Fulltext index created successfully.")
+
 
 # def createFulltextIndex(tx):
 #     tx.run("MATCH (n) DETACH DELETE n")
@@ -52,7 +55,7 @@ def createIndex(driver):
 #     '''
 #     tx.run(query)
 
-# Function to execute the query
+# # Function to execute the query
 # def createIndex(driver):
 #     with driver.session() as session:
 #         session.execute_write(createFulltextIndex)
