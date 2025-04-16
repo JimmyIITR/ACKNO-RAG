@@ -3,6 +3,7 @@ from langchain_neo4j import Neo4jGraph
 from neo4j import GraphDatabase
 import os
 from dotenv import load_dotenv
+from itertools import combinations
 
 load_dotenv()
 
@@ -90,6 +91,35 @@ def graphRetriever(question: str, entityChain, graph) -> str:
             {"query": entity},
         )
         result += "\n".join([el['output'] for el in response])
+    return result
+
+def matchNodeRetriver(question: str, entityChain, graph) -> str:
+    result = ""
+    
+    entities = entityChain.invoke(question).names
+    print(entities)
+    entity_nodes = {}
+    for entity in entities:
+        node_query = """
+        CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
+        YIELD node
+        RETURN node.id AS id
+        """
+        response = graph.query(node_query, {"query": entity})
+        if response:
+            entity_nodes[entity] = response[0]['id']
+
+    for en1, en2 in combinations(entities, 2):
+        if en1 in entity_nodes and en2 in entity_nodes:
+            relationship_query = """
+            MATCH (a)-[r:!MENTIONS]-(b)
+            WHERE a.id = $id1 AND b.id = $id2
+            RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
+            """
+            response = graph.query(relationship_query, {"id1": entity_nodes[en1], "id2": entity_nodes[en2]})
+            for rec in response:
+                result += rec['output'] + "\n"
+                
     return result
 
 

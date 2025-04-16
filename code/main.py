@@ -10,14 +10,15 @@ from langchain_core.runnables import RunnableLambda
 from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from dataBase import queries
 import prompts
+import selectData
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/data/dummytext.txt"
-LLM_MODEL = "mistral:latest"
-EMBEDDINGS_MODEL = "mxbai-embed-large"
+DATA_PATH = selectData.dataPath()
+LLM_MODEL = selectData.llmModel()
+EMBEDDINGS_MODEL = selectData.embeddingModel()
 
 def loadData(dataPath):
     """Load and split documents from specified path"""
@@ -67,6 +68,7 @@ Vector Data:
 {"#Document ".join(vectorResults)}"""
     print(res)
     return res
+
 def setupAnswerChain():
     """Set up and return the question answering chain"""
     graph = queries.neo4j()

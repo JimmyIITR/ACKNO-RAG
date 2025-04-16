@@ -4,18 +4,22 @@ from duckduckgo_search import DDGS
 from rank_bm25 import BM25Okapi
 import nltk
 import re
+import BM25GammaValidation, SBERTGammaValidation, TFIDFGammaValidation
 
 nltk.download('punkt')
 
 def get_top_urls(query, num_results=10):
+    exclusions = " -site:facebook.com -site:twitter.com -site:instagram.com -site:linkedin.com"
+    modified_query = query + exclusions
     try:
         with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=num_results)
+            results = ddgs.text(modified_query, max_results=num_results)
         urls = [result.get('href') for result in results if result.get('href')]
         return urls
     except Exception as e:
         print(f"Search error: {e}")
         return []
+
 
 def fetch_article_text(url):
     try:
@@ -36,16 +40,16 @@ def fetch_article_text(url):
 def tokenize(text):
     return nltk.word_tokenize(text)
 
-def compute_bm25_scores(claim, documents):
-    # Filter out documents that are empty after stripping whitespace
-    tokenized_docs = [tokenize(doc) for doc in documents if doc.strip()]
-    # Use explicit length check to avoid ambiguity
-    if len(tokenized_docs) == 0:
-        return []
-    bm25 = BM25Okapi(tokenized_docs)
-    query_tokens = tokenize(claim)
-    scores = bm25.get_scores(query_tokens)
-    return scores
+# def compute_bm25_scores(claim, documents):
+#     # Filter out documents that are empty after stripping whitespace
+#     tokenized_docs = [tokenize(doc) for doc in documents if doc.strip()]
+#     # Use explicit length check to avoid ambiguity
+#     if len(tokenized_docs) == 0:
+#         return []
+#     bm25 = BM25Okapi(tokenized_docs)
+#     query_tokens = tokenize(claim)
+#     scores = bm25.get_scores(query_tokens)
+#     return scores
 
 def main():
     claim = "The government announced a major tax cut in 2024."
@@ -70,14 +74,21 @@ def main():
         snippet = doc[:200] + "..." if len(doc) > 200 else doc
         print(f"\nDocument {idx+1} snippet:\n{snippet}")
     
-    print("\nComputing BM25 relevance scores...")
-    scores = compute_bm25_scores(claim, documents)
+    print("\nComputing relevance scores...")
+    scoresBM25 = BM25GammaValidation.compute_bm25_scores(claim, documents)
+    scoresTFIDF = TFIDFGammaValidation.computeTfIdfScores(claim, documents)
+    scoresSBERT = SBERTGammaValidation.computeSbertScores(claim, documents)
     
-    if scores.any():
-        for url, score in zip(urls, scores):
+    if scoresBM25.any():
+        for url, score in zip(urls, scoresBM25):
             print(f"{url} -> BM25 Score: {score:.2f}")
+            print(f"{url} -> TFIDF Score: {score:.2f}")
+            print(f"{url} -> SBERT Score: {score:.2f}")
     else:
         print("No scores computed.")
 
 if __name__ == "__main__":
     main()
+
+
+## Main have to changed by checking with the gammmaAggregate.py file

@@ -3,8 +3,9 @@ import re
 import ollama
 from typing import List
 from prompts import getSplitClaimPrompt
+import selectData
 
-LLM_MODEL = "mistral:latest"
+LLM_MODEL = selectData.llmModel()
 
 def generateAtomicClaims(paragraph: str) -> List[str]:
     try:
@@ -69,8 +70,5 @@ if __name__ == "__main__":
     testParagraph = (
         "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
     )
-    p = (
-        "Donald Trump has said he loves war, which includes nukes."
-    )
     
-    processParagraph(p)
+    processParagraph(testParagraph)
