@@ -64,7 +64,7 @@ def main():
     
     for i in range(8, 11):
         dataList = getCrossAndSelfURLsWithClaims(i)  # 5 related articles + 1 main = 6 total
-        for data in dataList:
+        for data in dataList: #working as if condition
             claim = data["main_claim"]["text"]
             if claim not in df['Claim'].values:
                 new_row = {'Claim': claim}
@@ -158,4 +158,4 @@ def testMain():
     print("Results saved to testdata_results.xlsx")
 
 if __name__ == "__main__":
-    testMain()
+    testMain() #yet to be done have to test and check which one performs best among all of them.

@@ -40,7 +40,7 @@ def compute_bm25_scores(claim, documents):
 
 def main():
     d = getCrossAndSelfURLsWithClaims(5) # current set for 5 others articls total will be +1 = 6
-    for data in d:
+    for data in d: #working as if condition for now
         claim = data["main_claim"]["text"]
         
         print("Retrieving search results...")
