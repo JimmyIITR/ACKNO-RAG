@@ -74,7 +74,7 @@ def main():
     llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
     entityChain = llm.with_structured_output(prompts.Entities)
     session = getSession()
-    d = getKCrossAndSelfURLsWithClaims(7,1) # experiment shows that 7 is the value for mixup from gamma
+    d = getKCrossAndSelfURLsWithClaims(7,1) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
     print(d)
     for data in d: #working as if condition for now
         
@@ -87,21 +87,25 @@ def main():
         combinedDocumentForGraph = ""
         text = fetchArticleText(urlSelf,session)
         combinedDocumentForGraph += text
+        print(text)
         trueEntities = entityChain.invoke(text)
-        trueEntNames = trueEntities.names
-        falseEntNames = []
-        for url in urlOther:
-            text = fetchArticleText(url,session)
-            combinedDocumentForGraph += text
-            falseEntities = entityChain.invoke(text)
-            falseEntNames += falseEntities.names
+        print(trueEntities.names)
+        # trueEntNames = trueEntities.names
+        # falseEntNames = []
+        # time.sleep(2)
+        # for url in urlOther:
+        #     text = fetchArticleText(url,session)
+        #     combinedDocumentForGraph += text
+        #     falseEntities = entityChain.invoke(text)
+        #     falseEntNames += falseEntities.names
+        #     time.sleep(2)
 
-        print(f"\n\n\n Combined data corpus: ")
-        print(combinedDocumentForGraph)
-        print(f"\n\n\n True Entities Name: ")
-        print(trueEntNames)
-        print(f"\n\n\n False Entities Name: ")
-        print(falseEntNames)
+        # print(f"\n\n\n Combined data corpus: ")
+        # print(combinedDocumentForGraph)
+        # print(f"\n\n\n True Entities Name: ")
+        # print(trueEntNames)
+        # print(f"\n\n\n False Entities Name: ")
+        # print(falseEntNames)
 
         #have to segregate true and false now by first constructing map and then 
 

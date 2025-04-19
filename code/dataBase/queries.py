@@ -66,6 +66,17 @@ def createIndex(driver):
 def driveClose(driver):
     driver.close()
 
+# def getEntities(question: str, entityChain):
+#     """
+#     Collects the neighborhood of entities mentioned
+#     in the question
+#     """
+#     result = []
+#     entities = entityChain.invoke(question)
+#     for entity in entities.names:
+#         result.append(entity)
+#     return result
+
 def graphRetriever(question: str, entityChain, graph) -> str:
     """
     Collects the neighborhood of entities mentioned
@@ -97,7 +108,7 @@ def matchNodeRetriver(question: str, entityChain, graph) -> str:
     result = ""
     
     entities = entityChain.invoke(question).names
-    print(entities)
+    # print(entities)
     entity_nodes = {}
     for entity in entities:
         node_query = """
