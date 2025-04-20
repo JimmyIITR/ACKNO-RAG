@@ -14,15 +14,19 @@ from langchain_core.runnables import RunnableLambda
 from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from dataBase import queries
 import prompts
-import selectData
+import articleExtrection
+from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_PATH = selectData.dataPath()
-LLM_MODEL = selectData.llmModel()
-EMBEDDINGS_MODEL = selectData.embeddingModel()
+FACT_DATA = tempFileFactText()
+FALSE_FACT_DATA = tempFileFalseFactText()
+
+DATA_PATH = dataPath()
+LLM_MODEL = llmModel()
+EMBEDDINGS_MODEL = embeddingModel()
 
 def loadData(dataPath):
     """Load and split documents from specified path"""
@@ -49,59 +53,11 @@ def addToGraph(graph, graphDocs):
         include_source=True
     )
 
-def initializeEmbeddings():
-    """Initialize and return vector retriever"""
-    embeddingModel = OllamaEmbeddings(model=EMBEDDINGS_MODEL)
-    vectorIndex = Neo4jVector.from_existing_graph(
-        embedding=embeddingModel,
-        search_type="hybrid",
-        node_label="Document",
-        text_node_properties=["text"],
-        embedding_node_property="embedding"
-    )
-    return vectorIndex.as_retriever()
-
-def retrieveContext(question, vectorRetriever, entityChain, graph):
-    """Retrieve combined context from graph and vector store"""
-    graphData = queries.graphRetriever(question, entityChain, graph)
-    vectorResults = [doc.page_content for doc in vectorRetriever.invoke(question)]
-    res = f"""Graph Data:
-{graphData}
-
-Vector Data:
-{"#Document ".join(vectorResults)}"""
-    print(res)
-    return res
-
-def setupAnswerChain():
-    """Set up and return the question answering chain"""
-    graph = queries.neo4j()
-    llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
-    entityChain = llm.with_structured_output(prompts.Entities)
-    vectorRetriever = initializeEmbeddings()
-    
-    promptTemplate = ChatPromptTemplate.from_template(prompts.template)
-    return (
-        {
-            "context": RunnableLambda(
-                lambda question: retrieveContext(
-                    question=question,
-                    vectorRetriever=vectorRetriever,
-                    entityChain=entityChain,
-                    graph=graph
-                )
-            ),
-            "question": RunnablePassthrough() 
-        }
-        | promptTemplate
-        | llm
-        | StrOutputParser()
-    )
 
 def handleDataIngestion():
     """Handle the data loading and graph population process"""
     print("Loading and processing data...")
-    documents = loadData(DATA_PATH)
+    documents = loadData(FACT_DATA)
     llmModel, graphDocuments = processLLM(documents)
     
     graph = queries.neo4j()
@@ -128,26 +84,8 @@ def handleDataIngestion():
         queries.driveClose(driver)
     print("Data ingestion completed successfully!\n")
 
-def queryInterface(answerChain):
-    """Handle user queries in a loop"""
-    print("\nQuery system ready. Type 'exit' to quit.\n")
-    while True:
-        userInput = input("Enter your question: ").strip()
-        if userInput.lower() in ('exit', 'quit'):
-            break
-        if not userInput:
-            continue
-            
-        response = answerChain.invoke(userInput)
-        print("\nResponse:")
-        print(response)
-        print("\n" + "="*50 + "\n")
+
 
 if __name__ == "__main__":
-    initialChoice = input("Initialize new data in graph? (yes/no): ").lower().strip()
-    if initialChoice == 'yes':
-        handleDataIngestion()
-    
-    qaChain = setupAnswerChain()
-    queryInterface(qaChain)
+    handleDataIngestion()
     print("Session terminated.")
