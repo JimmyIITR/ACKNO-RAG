@@ -11,7 +11,7 @@ from rank_bm25 import BM25Okapi
 import nltk
 import re
 import pandas as pd
-from gammaValidation.dataFetch import getCrossAndSelfURLsWithClaims, getKCrossAndSelfURLsWithClaims
+from dataFetch import getIthDataFromTrainData
 from sentence_transformers import SentenceTransformer
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -52,14 +52,13 @@ def tokenize(text):
     return nltk.word_tokenize(text)
 
 
-def main():
+def main(k=1):
     session = getSession()
-    d = getKCrossAndSelfURLsWithClaims(2,1) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
+    d = getIthDataFromTrainData(k,2) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
     #7 is the ideal as we can see from hyperparameter training of gaama but then prompt is getting bigger which is unable to handel by LLM so taking 2 only for now
-    print(d)
     for data in d: #working as if condition for now
         
-        print("Retrieving search results...")
+        print(f"Retrieving search results for {k}")
         urlSelf = data["main_claim"]["fact_checking_article"]
         urlOther = []
         for i in range(0,2):
@@ -76,7 +75,7 @@ def main():
             time.sleep(2)
         with open(abspath(join(dirname(__file__), '../dataBase/temp/falseFactText.txt')), "w", encoding="utf-8") as f:
             f.write(falseFactText)
-        print("Retrieving completed")
+        print(f"Retrieving completed for {k}")
 
 if __name__ == "__main__":
     main()

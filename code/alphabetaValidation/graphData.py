@@ -58,7 +58,20 @@ def getNodesListIDs(graph_docs) -> list[str]:
     """Return a sorted list of all unique node IDs in the given GraphDocuments."""
     return sorted({ node.id for doc in graph_docs for node in doc.nodes })
 
-
+def dataGeneratorForLogistic(graph, result):
+    """
+    result = {true: [], false: [], combined: []}
+    """
+    #have to complete this in morning 23rd april
+    #below lines are incomplete
+    a = queries.twoNodeConnection(result["true"][0],result["false"][0], result["combined"],graph)
+    b = queries.twoNodeConnection(result["true"][0],result["true"][0], result["combined"],graph)
+    # return data to alpha main it will store and to logistic regression latter
+    # here a and b are having data as multiple strings in it in \n formet
+    return {
+        "true":a,
+        "false":b,
+    }
 
 def handleDataIngestion(index=1):
     """Handle the data loading and graph population process"""
@@ -71,16 +84,16 @@ def handleDataIngestion(index=1):
     llmModel, graphDocuments = processLLM(falseDocuments)
     falseNodes = getNodesListIDs(graphDocuments)
     # print(falseNodes)
-    result = {
-        "true": trueNodes,
-        "false": falseNodes
-    }
-
 
     #new combiend data graph generation
     combinedData = trueDocuements + falseDocuments
     llmModel, graphDocuments = processLLM(combinedData)
-    
+    combinedNodes = getNodesListIDs(graphDocuments)
+    result = {
+        "true": trueNodes,
+        "false": falseNodes,
+        "combined": combinedNodes
+    }
     graph = queries.neo4j()
     driver = queries.driveOpen()
     try:
@@ -92,6 +105,7 @@ def handleDataIngestion(index=1):
         queries.driveClose(driver)
     #add data to database
     addToGraph(graph, graphDocuments)
+    res = dataGeneratorForLogistic(graph, result)
     print(f"Data added to Graph for {index}")
     #create index of the database
     driver = queries.driveOpen()
@@ -104,7 +118,7 @@ def handleDataIngestion(index=1):
         queries.driveClose(driver)
     print("Data ingestion completed successfully!\n")
     
-    return result
+    return res
 
 
 if __name__ == "__main__":

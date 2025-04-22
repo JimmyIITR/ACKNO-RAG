@@ -22,3 +22,12 @@ def resultsAlphaBeta(i=0):
 
 def resultGamma(i=0):
     return abspath(join(dirname(__file__), f'../results/gamma/results{i}.csv'))
+
+def getTestAVeriTecData():
+    return abspath(join(dirname(__file__), f'../data/AVeriTecData/dataTest.json'))
+
+def getTrainAVeriTecData():
+    return abspath(join(dirname(__file__), f'../data/AVeriTecData/dataTrain.json'))
+
+def getDevAVeriTecData():
+    return abspath(join(dirname(__file__), f'../data/AVeriTecData/dataDev.json'))
