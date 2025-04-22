@@ -46,36 +46,12 @@ def createIndex(driver):
         print("Fulltext index created successfully.")
 
 
-# def createFulltextIndex(tx):
-#     tx.run("MATCH (n) DETACH DELETE n")
-#     tx.run("DROP INDEX fulltext_entity_id IF EXISTS")
-#     query = '''
-#     CREATE FULLTEXT INDEX `fulltext_entity_id` 
-#     FOR (n:__Entity__) 
-#     ON EACH [n.id];
-#     '''
-#     tx.run(query)
-
-# # Function to execute the query
-# def createIndex(driver):
-#     with driver.session() as session:
-#         session.execute_write(createFulltextIndex)
-#         print("Fulltext index created successfully.")
-
-
 def driveClose(driver):
     driver.close()
 
-# def getEntities(question: str, entityChain):
-#     """
-#     Collects the neighborhood of entities mentioned
-#     in the question
-#     """
-#     result = []
-#     entities = entityChain.invoke(question)
-#     for entity in entities.names:
-#         result.append(entity)
-#     return result
+def getEntities(question: str, entityChain) -> list:
+    entities = entityChain.invoke(question)
+    return list(entities.names)
 
 def graphRetriever(question: str, entityChain, graph) -> str:
     """

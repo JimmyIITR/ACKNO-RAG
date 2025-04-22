@@ -1,3 +1,7 @@
+import sys
+from os.path import dirname, join, abspath
+sys.path.insert(0, abspath(join(dirname(__file__), '..'))) 
+
 import requests
 from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
@@ -16,7 +20,7 @@ import time
 
 nltk.download('punkt')
 
-RESULT_PATH = "/Users/jimmyaghera/Downloads/Thesis/ACKNO-RAG/results/gamma"
+RESULT_PATH = abspath(join(dirname(__file__), '../../results/gamma'))
 
 def getSession():
     session = requests.Session()

@@ -54,15 +54,34 @@ def addToGraph(graph, graphDocs):
         include_source=True
     )
 
+def getNodesListIDs(graph_docs) -> list[str]:
+    """Return a sorted list of all unique node IDs in the given GraphDocuments."""
+    return sorted({ node.id for doc in graph_docs for node in doc.nodes })
 
-def handleDataIngestion():
+
+
+def handleDataIngestion(index=1):
     """Handle the data loading and graph population process"""
     print("Loading and processing data...")
-    documents = loadData(FACT_DATA)
-    llmModel, graphDocuments = processLLM(documents)
+    trueDocuements = loadData(FACT_DATA)
+    llmModel, graphDocuments = processLLM(trueDocuements)
+    trueNodes = getNodesListIDs(graphDocuments)
+    # print(trueNodes)
+    falseDocuments = loadData(FALSE_FACT_DATA)
+    llmModel, graphDocuments = processLLM(falseDocuments)
+    falseNodes = getNodesListIDs(graphDocuments)
+    # print(falseNodes)
+    result = {
+        "true": trueNodes,
+        "false": falseNodes
+    }
+
+
+    #new combiend data graph generation
+    combinedData = trueDocuements + falseDocuments
+    llmModel, graphDocuments = processLLM(combinedData)
     
     graph = queries.neo4j()
-    #try to clean whole data first
     driver = queries.driveOpen()
     try:
         queries.clearDataWithIndex(driver)
@@ -73,7 +92,7 @@ def handleDataIngestion():
         queries.driveClose(driver)
     #add data to database
     addToGraph(graph, graphDocuments)
-    print("Data added to Graph")
+    print(f"Data added to Graph for {index}")
     #create index of the database
     driver = queries.driveOpen()
     try:
@@ -84,7 +103,8 @@ def handleDataIngestion():
     finally:
         queries.driveClose(driver)
     print("Data ingestion completed successfully!\n")
-
+    
+    return result
 
 
 if __name__ == "__main__":
