@@ -13,6 +13,7 @@ from langchain_ollama import OllamaEmbeddings
 from langchain_core.runnables import RunnableLambda
 from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from dataBase import queries
+from langchain_ollama import ChatOllama
 import prompts
 import articleExtrection
 from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
@@ -40,7 +41,7 @@ def loadData(dataPath):
 
 def processLLM(docs):
     """Process documents to create LLM instance and graph documents"""
-    llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
+    llm = ChatOllama(model=LLM_MODEL, temperature=0)
     graphTransformer = LLMGraphTransformer(llm=llm)
     graphDocs = graphTransformer.convert_to_graph_documents(docs)
     return llm, graphDocs

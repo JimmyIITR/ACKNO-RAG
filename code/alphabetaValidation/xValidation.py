@@ -10,6 +10,7 @@ from langchain_experimental.llms.ollama_functions import OllamaFunctions
 import prompts
 import selectData
 from dataBase import queries
+from langchain_ollama import ChatOllama
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -26,7 +27,7 @@ def retrieveContext(question, entityChain, graph):
 
 def setupAnswerChain():
     graph = queries.neo4j()
-    llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
+    llm = ChatOllama(model=LLM_MODEL, temperature=0)
     entityChain = llm.with_structured_output(prompts.Entities)
     
     promptTemplate = ChatPromptTemplate.from_template(prompts.template)

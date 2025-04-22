@@ -3,7 +3,7 @@ from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname(__file__), '..'))) 
 
 def llmModel():
-    return "gemma:latest" #mistral-small3.1
+    return "gemma3:4b" #mistral-small3.1
 
 def embeddingModel():
     return "mxbai-embed-large"
