@@ -56,9 +56,11 @@ def main(k=1):
     session = getSession()
     d = getIthDataFromTrainData(k,2) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
     #7 is the ideal as we can see from hyperparameter training of gaama but then prompt is getting bigger which is unable to handel by LLM so taking 2 only for now
+    res = ""
     for data in d: #working as if condition for now
         
         print(f"Retrieving search results for {k}")
+        res = data["main_claim"]["text"]
         urlSelf = data["main_claim"]["fact_checking_article"]
         urlOther = []
         for i in range(0,2):
@@ -76,6 +78,7 @@ def main(k=1):
         with open(abspath(join(dirname(__file__), '../dataBase/temp/falseFactText.txt')), "w", encoding="utf-8") as f:
             f.write(falseFactText)
         print(f"Retrieving completed for {k}")
+    return res
 
 if __name__ == "__main__":
     main()

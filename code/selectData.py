@@ -18,7 +18,7 @@ def tempFileFalseFactText():
     return abspath(join(dirname(__file__), './dataBase/temp/falseFactText.txt'))
 
 def resultsAlphaBeta(i=0):
-    return abspath(join(dirname(__file__), f'../result/alphaBeta/results{i}.csv'))
+    return abspath(join(dirname(__file__), f'../result/alphaBeta/results{i}.json'))
 
 def resultGamma(i=0):
     return abspath(join(dirname(__file__), f'../results/gamma/results{i}.csv'))

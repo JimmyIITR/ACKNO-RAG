@@ -24,3 +24,5 @@ with driver.session() as session:
     session.execute_read(test_connection)
 
 driver.close()
+
+# test_connection()

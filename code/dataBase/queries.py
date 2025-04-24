@@ -54,6 +54,11 @@ def getEntities(question: str, entityChain) -> list:
     entities = entityChain.invoke(question)
     return list(entities.names)
 
+def escapeLuceneQuery(query: str) -> str:
+    """Escape special characters for Lucene queries"""
+    specialChars = r'\+-&|!(){}[]^"~*?:\\/'
+    return ''.join(['\\' + char if char in specialChars else char for char in query])
+
 def graphRetriever(question: str, entityChain, graph) -> str:
     """
     Collects the neighborhood of entities mentioned
@@ -140,43 +145,75 @@ def matchNodeRetriver(question: str, entityChain, graph) -> str:
 #         result += rec['output'] + "\n"
                 
 #     return result
-def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph ) -> str:
+# def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph ) -> str:
+#     entityNode: Dict[str, str] = {}
+#     for name in combinedNodesName:
+#         result = graph.run(
+#             """
+#             CALL db.index.fulltext.queryNodes($indexName, $query, {limit:1})
+#             YIELD node
+#             RETURN node.id AS id
+#             """,
+#             indexName="fulltext_entity_id",
+#             query=name
+#         )
+#         record = result.single()
+#         if record:
+#             entityNode[name] = record["id"]
+
+#     if en1 not in entityNode:
+#         raise ValueError(f"Entity {en1!r} not found in index")
+#     if en2 not in entityNode:
+#         raise ValueError(f"Entity {en2!r} not found in index")
+#     id1, id2 = entityNode[en1], entityNode[en2]
+
+#     response = graph.run(
+#         """
+#         MATCH (a)-[r]-(b)
+#         WHERE a.id = $id1 AND b.id = $id2
+#           AND type(r) <> 'MENTIONS'
+#         RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
+#         """,
+#         id1=id1,
+#         id2=id2
+#     )
+
+#     return "\n".join(rec["output"] for rec in response)
+
+
+def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
     entityNode: Dict[str, str] = {}
+    
     for name in combinedNodesName:
-        result = graph.run(
-            """
-            CALL db.index.fulltext.queryNodes($indexName, $query, {limit:1})
-            YIELD node
-            RETURN node.id AS id
-            """,
-            indexName="fulltext_entity_id",
-            query=name
-        )
-        record = result.single()
-        if record:
-            entityNode[name] = record["id"]
+        node_query = """
+        CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
+        YIELD node
+        RETURN node.id AS id
+        """
+        result = graph.query(node_query, {"query": escapeLuceneQuery(name)})
+        if result:
+            entityNode[name] = result[0]["id"]
 
     if en1 not in entityNode:
-        raise ValueError(f"Entity {en1!r} not found in index")
+        return f"{en1} - R - {en2}"
+        # raise ValueError(f"Entity {en1!r} not found in index")
     if en2 not in entityNode:
-        raise ValueError(f"Entity {en2!r} not found in index")
+        return f"{en1} - R - {en2}"
+        # raise ValueError(f"Entity {en2!r} not found in index")
+    
     id1, id2 = entityNode[en1], entityNode[en2]
 
-    response = graph.run(
+    response = graph.query(
         """
         MATCH (a)-[r]-(b)
         WHERE a.id = $id1 AND b.id = $id2
           AND type(r) <> 'MENTIONS'
         RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
         """,
-        id1=id1,
-        id2=id2
+        params={"id1": id1, "id2": id2}
     )
 
     return "\n".join(rec["output"] for rec in response)
-
-
-
 # def generate_full_text_query(input: str) -> str:
 #     words = [el for el in remove_lucene_chars(input).split() if el]
 #     if not words:

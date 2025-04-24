@@ -2,7 +2,6 @@ import sys
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname(__file__), '..'))) 
 
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -58,37 +57,72 @@ def getNodesListIDs(graph_docs) -> list[str]:
     """Return a sorted list of all unique node IDs in the given GraphDocuments."""
     return sorted({ node.id for doc in graph_docs for node in doc.nodes })
 
+
+def extract_counts(paths_str):
+    paths = [p for p in paths_str.split("\n") if p.strip()]
+    counts = []
+    for p in paths:
+        parts = p.split(" - ")
+        total_nodes = (len(parts) + 1) // 2 # for relation removalas rel will be on odd places
+        intermediate = max(0, total_nodes - 2)
+        counts.append(intermediate)
+    return counts, len(paths)
+
 def dataGeneratorForLogistic(graph, result):
-    """
-    result = {true: [], false: [], combined: []}
-    """
-    #have to complete this in morning 23rd april
+    """ result = {true: [], false: [], combined: []} """
     #below lines are incomplete
-    a = queries.twoNodeConnection(result["true"][0],result["false"][0], result["combined"],graph)
-    b = queries.twoNodeConnection(result["true"][0],result["true"][0], result["combined"],graph)
-    # return data to alpha main it will store and to logistic regression latter
-    # here a and b are having data as multiple strings in it in \n formet
+    true_nodes = result["true"]
+    false_nodes = result["false"]
+    combined = result["combined"]
+
+    tt_horiz, tt_vert = [], []
+    tf_horiz, tf_vert = [], []
+
+    # 1 True–True
+    for i, en1 in enumerate(true_nodes):
+        for en2 in true_nodes[i+1:]:
+            paths_str = queries.twoNodeConnection(en1, en2, combined, graph)
+            counts, num_paths = extract_counts(paths_str)
+            tt_horiz.extend(counts)
+            tt_vert.append(num_paths)
+
+    # 2 True–False
+    for en1 in true_nodes:
+        for en2 in false_nodes:
+            paths_str = queries.twoNodeConnection(en1, en2, combined, graph)
+            counts, num_paths = extract_counts(paths_str)
+            tf_horiz.extend(counts)
+            tf_vert.append(num_paths)
+
     return {
-        "true":a,
-        "false":b,
+        "true_true_horizontal":  tt_horiz,
+        "true_true_vertical":    tt_vert,
+        "true_false_horizontal": tf_horiz,
+        "true_false_vertical":   tf_vert,
     }
 
 def handleDataIngestion(index=1):
     """Handle the data loading and graph population process"""
-    print("Loading and processing data...")
+    print(f"Loading and processing data for {index}")
     trueDocuements = loadData(FACT_DATA)
     llmModel, graphDocuments = processLLM(trueDocuements)
     trueNodes = getNodesListIDs(graphDocuments)
+    print(f"FACT data completeted for {index}")
+    print(trueNodes) ## temp
     # print(trueNodes)
     falseDocuments = loadData(FALSE_FACT_DATA)
     llmModel, graphDocuments = processLLM(falseDocuments)
     falseNodes = getNodesListIDs(graphDocuments)
+    print(f"FALSE data completeted for {index}")
+    print(falseNodes) ## temp
     # print(falseNodes)
 
     #new combiend data graph generation
     combinedData = trueDocuements + falseDocuments
     llmModel, graphDocuments = processLLM(combinedData)
+    print(f"Combined data completeted for {index}")
     combinedNodes = getNodesListIDs(graphDocuments)
+    print(combinedNodes) ## temp
     result = {
         "true": trueNodes,
         "false": falseNodes,
@@ -104,9 +138,9 @@ def handleDataIngestion(index=1):
     finally:
         queries.driveClose(driver)
     #add data to database
-    addToGraph(graph, graphDocuments)
-    res = dataGeneratorForLogistic(graph, result)
+    addToGraph(graph, graphDocuments) 
     print(f"Data added to Graph for {index}")
+    
     #create index of the database
     driver = queries.driveOpen()
     try:
@@ -117,10 +151,20 @@ def handleDataIngestion(index=1):
     finally:
         queries.driveClose(driver)
     print("Data ingestion completed successfully!\n")
-    
+    res = dataGeneratorForLogistic(graph, result)
+    print(f"response genereted for {index}")
     return res
 
 
 if __name__ == "__main__":
-    handleDataIngestion()
+    # x = handleDataIngestion()
+    # print(x)
+    graph = queries.neo4j()
+    result = {
+        "true": ['About Us', 'Apple', 'Apple Commercial', 'Computer Salesman', 'Connery', 'Contact', 'Democratic Governors', 'Dominion', 'Dominion Voting Systems', 'Donald Trump', 'Elias Atienza', 'Fact Check', 'James Bond', 'Jeff Foxworthy', 'John Adams', 'John Willshire', 'Os X', 'Privacy Policy', 'Scoopertino', 'Sean Connery', 'Small Businesses', 'Steve Jobs', 'Terms Of Service', 'Thomas Jefferson', 'Twitter', 'Willshire'],
+        "false": ['10Best Reviewed Jobs', '1100 Connecticut Ave. Nw Suite 1300B', '2020', '2020 Elections', '2020 Rnc', '2020 Us Elections Factchat #Chatbot', '2050', '801 3Rd St. S St. Petersburg', 'About Us', 'Abraham Lincoln', 'Abraham Lincoln Presidential Library And Museum', 'Aca', 'Accessibility', 'Account', 'Address', 'Administration', 'Advertise', 'Ady Barkan', 'Affordable Care Act', 'America', 'American Constitution Society', 'American Flag', 'American People', 'Americans', 'Amy Sherman', 'Andrew Cuomo', 'Andy Nguyen', 'Animal Agriculture', 'Antibodies', 'April 10', 'April 13', 'April 21', 'April 27', 'April 7, 2020', 'April 8, 2021', 'Associated Press', 'Asylum', 'At-Home Services', 'Aug. 26, 2020', 'Australia', 'Baltimore', 'Barack Obama', 'Barkan', 'Barr', 'Bernie Sanders', 'Biden', 'Biden Promise Tracker', 'Bill', 'Bill And Melinda Gates Foundation', 'Bill Gates', 'Bill Mccarthy', 'Bloggers', 'Bobby Rush', 'Border', 'Breast Cancer', 'Broadcasting Systems', 'Bulk-Power System', 'Burgess Owens', 'California', 'Careers', 'Cdc', 'Center For Disease Control And Prevention', 'Centers For Disease Control And Prevention', 'Charles Schumer', 'Chicago', 'Chicago Tribune', 'Children', 'China', 'Chinese', 'Christian Leaders', 'Christian Mcwhirter', 'Church Services', 'Church-Goers', 'Churches', 'Cities', 'City Of Greenville', 'Classifieds', 'Clean Energy Infrastructure', 'Clinicians', 'Cobb And Cherokee Counties', 'Committee For A Responsible Federal Budget', 'Communists', 'Community Policing', 'Congress', 'Contact Tracing', 'Contact Us', 'Copyright ©All Rights Reserved', 'Cornell', 'Cornell Law School', 'Coronavirus', 'Coronavirus Pandemic', 'Corporate Income', 'Corporate Income Tax Rate', 'Corrections', 'Corrections And Updates', 'Corridor Highway Project In Cobb And Cherokee Counties', 'Couple', 'Court Staff', 'Covid Vaccine Distribution', 'Covid-19', 'Covid-19 Lockdown Plans', 'Covid-19 Response Efforts', 'Covid-19 Testing', 'Covid-19 Tracing', 'Covid-19 Vaccine', 'Crime', 'Critical Electric Infrastructure', 'Crossfire Hurricane', 'Curve', 'Cyber Attacks', 'Dakota Gruener', 'Dan Brouillette', 'David Menchetti', 'Debate', 'Defense Department', 'Deferred Action For Childhood Arrivals Program', 'Democratic National Convention', 'Democratic Party', 'Democratic Primary Debate', 'Department Of Energy', 'District Of Columbia', 'Do Not Sell My Info/Cookie Policy', 'Domestic Policy', 'Donald', 'Donald J. Trump', 'Donald Trump', 'Donate', 'Donations', 'Dtap', 'Duke (Energy)', 'Ebay', 'Election 2020', 'Electrical Grids', 'Electronic Systems', 'Ella Lee', 'Empire', 'Enewspaper', 'Entertainment', 'Environment', 'Ethical Principles', 'European Union', 'Facebook', 'Facebook Post', 'Facebook Posts', 'Factcheck.Org', 'Fascists', 'Fbi', 'Fda', 'Federal Bureau Of Investigation', 'Federal Emergency Management Agency', 'Federal Funding', 'Federal Government', 'Federal Register', 'Federal Spending', 'Federal Stimulus Money For Schools', 'Feedback', 'Flipboard', 'Florida', 'Follow Us', 'Foreign Adversaries', 'Foreign Policy', 'Foreign Threats', 'Forever', 'Fort Mchenry', 'Fort Mchenry National Monument And Historic Shrine', 'Fossil Fuels', 'Fracking', 'Francis Scott Key', 'Funding', 'Gannett', 'Gas-Powered Cars', 'Gates Connection', 'Gates Foundation', 'Gavi', 'Gavi, The Vaccine Alliance', 'Georgia', 'Germany', 'Global Trafficking Rings', 'Government', 'Governors', 'Govtrack', 'Gowns', 'Green New Deal', 'Greenville City Council', 'Greenville, Mississippi', 'Gross Domestic Product', 'Guns', 'H.R. 6666', 'Health Care', 'Health Centers', 'Health Crisis', 'Help Center', 'Hepatitis A', 'Hepatitis B', 'Her', 'Home Delivery', 'Homeland Security Investigations', 'Horse’S Ass', 'Hospitals', 'House', 'House Committee On Energy And Commerce', 'Houses Of Worship', 'Housing', 'Hpv', 'Hr6666', 'Hugh Hewitt', 'Human Trafficking', 'Human Trafficking Victims', 'Humanitarian Needs', 'Hydraulic Fracturing', 'Id2020', 'Ifcn', 'Ill.', 'Illegal Immigrants', 'Illinois', 'Illinois House Labor And Commerce Committee', 'Immigrants', 'Immigration', 'Immigration And Customs Enforcement', 'Immigration Cases', 'Immigration Judges', 'Immigration Officials', 'Immigration Plan', 'Immunization Action Coalition', 'In-Person Learning', 'Indiana', 'Influenza', 'Infrastructure Bill', 'Instagram', 'Intelligence Community', 'Internet Servers', 'Internships', 'Interpreters', 'Iowa', 'Iran', 'Isolation', 'Italy', 'J. Trump', 'James Madison', 'Janet Yellen', 'Japan', 'Joe', 'Joe Biden', 'John Velazquez', 'Jon Greenberg', 'Joni Ernst', 'July 29', 'June', 'June 26', 'June 5, 2008', 'Justice Department', 'Kaiser Health News', 'Kamala', 'Kamala Harris', 'Karen Pence', 'Kasim Reed', 'Kayleigh Mcenany', 'Kentucky Derby', 'Kristi Noem', 'Larry Hogan', 'Law Enforcement', 'Lawful Permanent Residents', 'Lebron James', 'Legal Action', 'Legislatures', 'Licensing & Reprints', 'Life', 'Lincoln', 'Linkedin', 'Liquor Stores', 'Local Business News', 'Local Governments', 'Louis Jacobson', 'Louise Slaughter', 'Madison', 'March 13', 'March 2, 2017', 'Maricopa County', 'Marijuana', 'Marsha Blackburn', 'Maryland', 'May 15', 'May 15 Press Briefing', 'May 2, 2021', 'May 3, 2021', 'May 30, 2021', 'Mayo Clinic', 'Mayor Errick D. Simmons', 'Mayors', 'Mcclatchy D.C.', 'Mcclatchy Dc', 'Meet The Press', 'Melinda Gates', 'Mental Health Counseling', 'Michael Flynn', 'Michigan', 'Microsoft', 'Migrants', 'Mike Pence', 'Military', 'Miriam Valverde', 'Misinformation', 'Mississippi', 'Mississippi Churchgoers', 'Missouri', 'Mitch Mcconnell', 'Mmr', 'Mobile Apps', 'Mobs', 'Money', 'Monthly', 'Mosques', 'My Account', 'N-95 Respirators', 'Nancy Pelosi', 'National Anthem', 'National Conference Of State Legislatures', 'Natural Gas', 'Nbc', 'Net-Zero', 'Net-Zero Emissions', 'New York', 'New York Times', 'News', 'Newsletters', 'Newsroom', 'Newsrooms', 'Nextgen Climate Action Committee', 'Nonprofit Organizations', 'North Carolina', 'Northwest Corridor Highway', 'November', 'November 28, 2016', 'Npr', 'Obama', 'Obama-Biden Administration', 'Obameter', 'Officials Dispute Trump’S Claim', 'Oil', 'One Time', 'Online Prayers', 'Open Borders', 'Opinion', 'Organization', 'Our Process', 'Our Staff', 'Pandemic', 'Pants On Fire', 'Patients', 'Paul Manafort', 'Paul Specht', 'Pence', 'Pennsylvania', 'People', 'Personal Protective Equipment', 'Pinterest', 'Places Of Worship', 'Plaintiffs', 'Plasma', 'Podcasts', 'Police', 'Police Funding', 'Polio', 'Politifact', 'Politifact Staff', 'Poynter Institute', 'Preexisting Conditions', 'President', 'Press Releases', 'Privacy Policy', 'Promise Tracker', 'Public Health Officials', 'Quarantine', 'Rachel Maddow', 'Randy Feenstra', 'Readers', 'Recent Articles And Fact-Checks', 'Recent Fact-Checks', 'Reddit', 'Reform', 'Religious And Philosophical Exemptions', 'Remarks By President Trump On Vaccine Development', 'Republican Convention', 'Republican National Committee', 'Republican National Convention', 'Republican Party Nomination', 'Republicans', 'Resolution', 'Respirators', 'Richard Grinell', 'Rick Barr', 'Rick Scott', 'Roads & Bridges', 'Ron Johnson', 'Rss', 'Rss Feeds', 'Rush Limbaugh', 'Russia', 'Samantha Putterman', 'Sanctuary Cities', 'Satellite Information Network, Llc', 'School', 'School Choice', 'School Immunization Laws', 'School Immunization Requirements', 'Schools', 'Sean Hannity', 'Senate', 'September 10, 2017', 'Shop', 'Sitemap', 'Social', 'Social Distancing', 'Social Media Platforms', 'Socialism', 'Son', 'Soviet Union', 'Sports', 'Sports Weekly Studio', 'St. Petersburg, Fl', 'Staff', 'State', 'State Governments', 'State Laws And Mandates By Vaccine', 'State School Immunization', 'State Vaccination Requirements', 'States', 'Stimulus Money', 'Stores And Abortion Clinics', 'Storytellers', 'Submitting Letters To The Editor', 'Subscribe', 'Suggest A Fact-Check', 'Supplies', 'Support', 'Synagogue', 'Tax Deductible Contribution', 'Taxes', 'Tech', 'Tech Bias Story Sharing Tool', 'Terms & Conditions', 'Terms Of Service', 'Testing', 'Texas', 'The City', 'The Daily Beast', 'The Facts Newsletter', 'The Poynter Institute Menu', 'The Star-Spangled Banner', 'The Wall', 'Tiktok', 'Tips', 'Trace Act', 'Trafficking', 'Trans-Pacific Partnership', 'Travel', 'Travel Restrictions', 'Treatment_1', 'Treatment_2', 'Trump', 'Trump 2016 Campaign', 'Trump Administration', 'Trump Campaign', 'Trump White House', 'Trump-O-Meter', 'Trump’S Presidency', 'Trusted Information', 'Truth', 'Truth Squad', 'Truth-O-Meter', 'Tucker Carlson', 'Tweet', 'Twitter', 'U.S.', 'U.S. Citizens', 'U.S. Government', 'United States', 'United States Bulk-Power System', 'United States’ National Anthem', 'Us Trafficking Arrests', 'Usa Today', 'User Policies', 'Utah', 'Vaccinations', 'Vaccine', 'Vaccines', 'Ventilators', 'Vermont', 'Victoria Knight', 'Virginia', 'Virus', 'Washington', 'Washington, D.C.', 'Washington, Dc', 'Wealthy', 'West Virginia', 'White House', 'Who', 'Who Meeting', 'William Barr', 'Willie Wilson', 'Wisconsin', 'Wisconsin Schools', 'World Health Organization', 'Wreg', 'Wreg Memphis', 'Wuhan', 'Xi Jinping', 'Yearly', 'You', 'Young Men’S Lyceum Of Springfield', 'Your California Privacy Rights/Privacy Policy', 'Youtube'],
+        "combined":['10Best Reviewed Jobs', '1100 Connecticut Ave. Nw Suite 1300B', '2020', '2020 Elections', '2020 Rnc', '2020 Us Elections Factchat #Chatbot', '2050', '801 3Rd St. S St. Petersburg', 'About Us', 'Abraham Lincoln', 'Abraham Lincoln Presidential Library And Museum', 'Aca', 'Accessibility', 'Account', 'Address', 'Administration', 'Advertise', 'Ady Barkan', 'Affordable Care Act', 'America', 'American Constitution Society', 'American Flag', 'American People', 'Americans', 'Amy Sherman', 'Andrew Cuomo', 'Andy Nguyen', 'Animal Agriculture', 'Antibodies', 'Apple', 'Apple Commercial', 'April 10', 'April 13', 'April 21', 'April 27', 'April 7, 2020', 'April 8, 2021', 'Associated Press', 'Asylum', 'At-Home Services', 'Aug. 26, 2020', 'Australia', 'Baltimore', 'Barack Obama', 'Barkan', 'Barr', 'Bernie Sanders', 'Biden', 'Biden Promise Tracker', 'Bill', 'Bill And Melinda Gates Foundation', 'Bill Gates', 'Bill Mccarthy', 'Bloggers', 'Bobby Rush', 'Border', 'Breast Cancer', 'Broadcasting Systems', 'Bulk-Power System', 'Burgess Owens', 'California', 'Careers', 'Cdc', 'Center For Disease Control And Prevention', 'Centers For Disease Control And Prevention', 'Charles Schumer', 'Chicago', 'Chicago Tribune', 'Children', 'China', 'Chinese', 'Christian Leaders', 'Christian Mcwhirter', 'Church Services', 'Church-Goers', 'Churches', 'Cities', 'City Of Greenville', 'Classifieds', 'Clean Energy Infrastructure', 'Clinicians', 'Cobb And Cherokee Counties', 'Committee For A Responsible Federal Budget', 'Communists', 'Community Policing', 'Computer Salesman', 'Congress', 'Connery', 'Contact', 'Contact Tracing', 'Contact Us', 'Copyright ©All Rights Reserved', 'Cornell', 'Cornell Law School', 'Coronavirus', 'Coronavirus Pandemic', 'Corporate Income', 'Corporate Income Tax Rate', 'Corrections', 'Corrections And Updates', 'Corridor Highway Project In Cobb And Cherokee Counties', 'Couple', 'Court Staff', 'Covid Vaccine Distribution', 'Covid-19', 'Covid-19 Lockdown Plans', 'Covid-19 Response Efforts', 'Covid-19 Testing', 'Covid-19 Tracing', 'Covid-19 Vaccine', 'Crime', 'Critical Electric Infrastructure', 'Crossfire Hurricane', 'Curve', 'Cyber Attacks', 'Dakota Gruener', 'Dan Brouillette', 'David Menchetti', 'Debate', 'Defense Department', 'Deferred Action For Childhood Arrivals Program', 'Democratic Governors', 'Democratic National Convention', 'Democratic Party', 'Democratic Primary Debate', 'Department Of Energy', 'District Of Columbia', 'Do Not Sell My Info/Cookie Policy', 'Domestic Policy', 'Dominion', 'Dominion Voting Systems', 'Donald', 'Donald J. Trump', 'Donald Trump', 'Donate', 'Donations', 'Dtap', 'Duke (Energy)', 'Ebay', 'Election 2020', 'Electrical Grids', 'Electronic Systems', 'Elias Atienza', 'Ella Lee', 'Empire', 'Enewspaper', 'Entertainment', 'Environment', 'Ethical Principles', 'European Union', 'Facebook', 'Facebook Post', 'Facebook Posts', 'Fact Check', 'Factcheck.Org', 'Fascists', 'Fbi', 'Fda', 'Federal Bureau Of Investigation', 'Federal Emergency Management Agency', 'Federal Funding', 'Federal Government', 'Federal Register', 'Federal Spending', 'Federal Stimulus Money For Schools', 'Feedback', 'Flipboard', 'Florida', 'Follow Us', 'Foreign Adversaries', 'Foreign Policy', 'Foreign Threats', 'Forever', 'Fort Mchenry', 'Fort Mchenry National Monument And Historic Shrine', 'Fossil Fuels', 'Fracking', 'Francis Scott Key', 'Funding', 'Gannett', 'Gas-Powered Cars', 'Gates Connection', 'Gates Foundation', 'Gavi', 'Gavi, The Vaccine Alliance', 'Georgia', 'Germany', 'Global Trafficking Rings', 'Government', 'Governors', 'Govtrack', 'Gowns', 'Green New Deal', 'Greenville City Council', 'Greenville, Mississippi', 'Gross Domestic Product', 'Guns', 'H.R. 6666', 'Health Care', 'Health Centers', 'Health Crisis', 'Help Center', 'Hepatitis A', 'Hepatitis B', 'Her', 'Home Delivery', 'Homeland Security Investigations', 'Horse’S Ass', 'Hospitals', 'House', 'House Committee On Energy And Commerce', 'Houses Of Worship', 'Housing', 'Hpv', 'Hr6666', 'Hugh Hewitt', 'Human Trafficking', 'Human Trafficking Victims', 'Humanitarian Needs', 'Hydraulic Fracturing', 'Id2020', 'Ifcn', 'Ill.', 'Illegal Immigrants', 'Illinois', 'Illinois House Labor And Commerce Committee', 'Immigrants', 'Immigration', 'Immigration And Customs Enforcement', 'Immigration Cases', 'Immigration Judges', 'Immigration Officials', 'Immigration Plan', 'Immunization Action Coalition', 'In-Person Learning', 'Indiana', 'Influenza', 'Infrastructure Bill', 'Instagram', 'Intelligence Community', 'Internet Servers', 'Internships', 'Interpreters', 'Iowa', 'Iran', 'Isolation', 'Italy', 'J. Trump', 'James Bond', 'James Madison', 'Janet Yellen', 'Japan', 'Jeff Foxworthy', 'Joe', 'Joe Biden', 'John Adams', 'John Velazquez', 'John Willshire', 'Jon Greenberg', 'Joni Ernst', 'July 29', 'June', 'June 26', 'June 5, 2008', 'Justice Department', 'Kaiser Health News', 'Kamala', 'Kamala Harris', 'Karen Pence', 'Kasim Reed', 'Kayleigh Mcenany', 'Kentucky Derby', 'Kristi Noem', 'Larry Hogan', 'Law Enforcement', 'Lawful Permanent Residents', 'Lebron James', 'Legal Action', 'Legislatures', 'Licensing & Reprints', 'Life', 'Lincoln', 'Linkedin', 'Liquor Stores', 'Local Business News', 'Local Governments', 'Louis Jacobson', 'Louise Slaughter', 'Madison', 'March 13', 'March 2, 2017', 'Maricopa County', 'Marijuana', 'Marsha Blackburn', 'Maryland', 'May 15', 'May 15 Press Briefing', 'May 2, 2021', 'May 3, 2021', 'May 30, 2021', 'Mayo Clinic', 'Mayor Errick D. Simmons', 'Mayors', 'Mcclatchy D.C.', 'Mcclatchy Dc', 'Meet The Press', 'Melinda Gates', 'Mental Health Counseling', 'Michael Flynn', 'Michigan', 'Microsoft', 'Migrants', 'Mike Pence', 'Military', 'Miriam Valverde', 'Misinformation', 'Mississippi', 'Mississippi Churchgoers', 'Missouri', 'Mitch Mcconnell', 'Mmr', 'Mobile Apps', 'Mobs', 'Money', 'Monthly', 'Mosques', 'My Account', 'N-95 Respirators', 'Nancy Pelosi', 'National Anthem', 'National Conference Of State Legislatures', 'Natural Gas', 'Nbc', 'Net-Zero', 'Net-Zero Emissions', 'New York', 'New York Times', 'News', 'Newsletters', 'Newsroom', 'Newsrooms', 'Nextgen Climate Action Committee', 'Nonprofit Organizations', 'North Carolina', 'Northwest Corridor Highway', 'November', 'November 28, 2016', 'Npr', 'Obama', 'Obama-Biden Administration', 'Obameter', 'Officials Dispute Trump’S Claim', 'Oil', 'One Time', 'Online Prayers', 'Open Borders', 'Opinion', 'Organization', 'Os X', 'Our Process', 'Our Staff', 'Pandemic', 'Pants On Fire', 'Patients', 'Paul Manafort', 'Paul Specht', 'Pence', 'Pennsylvania', 'People', 'Personal Protective Equipment', 'Pinterest', 'Places Of Worship', 'Plaintiffs', 'Plasma', 'Podcasts', 'Police', 'Police Funding', 'Polio', 'Politifact', 'Politifact Staff', 'Poynter Institute', 'Preexisting Conditions', 'President', 'Press Releases', 'Privacy Policy', 'Promise Tracker', 'Public Health Officials', 'Quarantine', 'Rachel Maddow', 'Randy Feenstra', 'Readers', 'Recent Articles And Fact-Checks', 'Recent Fact-Checks', 'Reddit', 'Reform', 'Religious And Philosophical Exemptions', 'Remarks By President Trump On Vaccine Development', 'Republican Convention', 'Republican National Committee', 'Republican National Convention', 'Republican Party Nomination', 'Republicans', 'Resolution', 'Respirators', 'Richard Grinell', 'Rick Barr', 'Rick Scott', 'Roads & Bridges', 'Ron Johnson', 'Rss', 'Rss Feeds', 'Rush Limbaugh', 'Russia', 'Samantha Putterman', 'Sanctuary Cities', 'Satellite Information Network, Llc', 'School', 'School Choice', 'School Immunization Laws', 'School Immunization Requirements', 'Schools', 'Scoopertino', 'Sean Connery', 'Sean Hannity', 'Senate', 'September 10, 2017', 'Shop', 'Sitemap', 'Small Businesses', 'Social', 'Social Distancing', 'Social Media Platforms', 'Socialism', 'Son', 'Soviet Union', 'Sports', 'Sports Weekly Studio', 'St. Petersburg, Fl', 'Staff', 'State', 'State Governments', 'State Laws And Mandates By Vaccine', 'State School Immunization', 'State Vaccination Requirements', 'States', 'Steve Jobs', 'Stimulus Money', 'Stores And Abortion Clinics', 'Storytellers', 'Submitting Letters To The Editor', 'Subscribe', 'Suggest A Fact-Check', 'Supplies', 'Support', 'Synagogue', 'Tax Deductible Contribution', 'Taxes', 'Tech', 'Tech Bias Story Sharing Tool', 'Terms & Conditions', 'Terms Of Service', 'Testing', 'Texas', 'The City', 'The Daily Beast', 'The Facts Newsletter', 'The Poynter Institute Menu', 'The Star-Spangled Banner', 'The Wall', 'Thomas Jefferson', 'Tiktok', 'Tips', 'Trace Act', 'Trafficking', 'Trans-Pacific Partnership', 'Travel', 'Travel Restrictions', 'Treatment_1', 'Treatment_2', 'Trump', 'Trump 2016 Campaign', 'Trump Administration', 'Trump Campaign', 'Trump White House', 'Trump-O-Meter', 'Trump’S Presidency', 'Trusted Information', 'Truth', 'Truth Squad', 'Truth-O-Meter', 'Tucker Carlson', 'Tweet', 'Twitter', 'U.S.', 'U.S. Citizens', 'U.S. Government', 'United States', 'United States Bulk-Power System', 'United States’ National Anthem', 'Us Trafficking Arrests', 'Usa Today', 'User Policies', 'Utah', 'Vaccinations', 'Vaccine', 'Vaccines', 'Ventilators', 'Vermont', 'Victoria Knight', 'Virginia', 'Virus', 'Washington', 'Washington, D.C.', 'Washington, Dc', 'Wealthy', 'West Virginia', 'White House', 'Who', 'Who Meeting', 'William Barr', 'Willie Wilson', 'Willshire', 'Wisconsin', 'Wisconsin Schools', 'World Health Organization', 'Wreg', 'Wreg Memphis', 'Wuhan', 'Xi Jinping', 'Yearly', 'You', 'Young Men’S Lyceum Of Springfield', 'Your California Privacy Rights/Privacy Policy', 'Youtube'],
+    }
+    x = dataGeneratorForLogistic(graph, result)
+    print(x)
     print("Session terminated.")
