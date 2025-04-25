@@ -115,9 +115,75 @@ def matchNodeRetriver(question: str, entityChain, graph) -> str:
                 
     return result
 
+# def matchNodeRetriver(en1: str, en2: str, combinedNodesName, graph) -> str:
+#     result = ""
+#     # make mapping of node and name 
+#     entity_nodes = {}
+#     for entity in combinedNodesName:
+#         node_query = """
+#         CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
+#         YIELD node
+#         RETURN node.id AS id
+#         """
+#         response = graph.query(node_query, {"query": entity})
+#         if response:
+#             entity_nodes[entity] = response[0]['id']
+#     # just a verificaiotin before calling 
+#     try:
+#         id1 = entity_nodes[en1]
+#         id2 = entity_nodes[en2]
+#     except KeyError as e:
+#         raise ValueError(f"Entity {e.args[0]!r} not found in entity_nodes") from None
+#     # final call for database
+#     relationship_query = """
+#     MATCH (a)-[r:!MENTIONS]-(b)
+#     WHERE a.id = $id1 AND b.id = $id2
+#     RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
+#     """
+#     response = graph.query(relationship_query, {"id1": id1, "id2": id2})
+#     for rec in response:
+#         result += rec['output'] + "\n"
+                
+#     return result
+# def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph ) -> str:
+#     entityNode: Dict[str, str] = {}
+#     for name in combinedNodesName:
+#         result = graph.run(
+#             """
+#             CALL db.index.fulltext.queryNodes($indexName, $query, {limit:1})
+#             YIELD node
+#             RETURN node.id AS id
+#             """,
+#             indexName="fulltext_entity_id",
+#             query=name
+#         )
+#         record = result.single()
+#         if record:
+#             entityNode[name] = record["id"]
+
+#     if en1 not in entityNode:
+#         raise ValueError(f"Entity {en1!r} not found in index")
+#     if en2 not in entityNode:
+#         raise ValueError(f"Entity {en2!r} not found in index")
+#     id1, id2 = entityNode[en1], entityNode[en2]
+
+#     response = graph.run(
+#         """
+#         MATCH (a)-[r]-(b)
+#         WHERE a.id = $id1 AND b.id = $id2
+#           AND type(r) <> 'MENTIONS'
+#         RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
+#         """,
+#         id1=id1,
+#         id2=id2
+#     )
+
+#     return "\n".join(rec["output"] for rec in response)
+
 def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
     entityNode: Dict[str, str] = {}
     
+    # Node ID lookup remains the same
     for name in combinedNodesName:
         node_query = """
         CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
@@ -128,26 +194,27 @@ def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -
         if result:
             entityNode[name] = result[0]["id"]
 
-    if en1 not in entityNode:
+    if en1 not in entityNode or en2 not in entityNode:
         return f"{en1} - R - {en2}"
-        # raise ValueError(f"Entity {en1!r} not found in index")
-    if en2 not in entityNode:
-        return f"{en1} - R - {en2}"
-        # raise ValueError(f"Entity {en2!r} not found in index")
     
     id1, id2 = entityNode[en1], entityNode[en2]
 
+    # Modified query with degree check
     response = graph.query(
         """
+        MATCH (a {id: $id1}), (b {id: $id2})
+        WITH a, b, 
+            size([(a)-[r]-(c) WHERE type(r) <> 'MENTIONS' | r]) AS a_degree,
+            size([(b)-[r]-(d) WHERE type(r) <> 'MENTIONS' | r]) AS b_degree
+        WHERE a_degree > 3 OR b_degree > 3
         MATCH (a)-[r]-(b)
-        WHERE a.id = $id1 AND b.id = $id2
-          AND type(r) <> 'MENTIONS'
+        WHERE type(r) <> 'MENTIONS'
         RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
         """,
         params={"id1": id1, "id2": id2}
     )
 
-    return "\n".join(rec["output"] for rec in response)
+    return "\n".join(rec["output"] for rec in response) if response else ""
 # def generate_full_text_query(input: str) -> str:
 #     words = [el for el in remove_lucene_chars(input).split() if el]
 #     if not words:
