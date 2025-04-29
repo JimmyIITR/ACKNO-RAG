@@ -8,39 +8,21 @@ URI = os.getenv("NEO4J_URI_LOCAL")
 USER = os.getenv("NEO4J_USERNAME_LOCAL")
 PASSWORD = os.getenv("NEO4J_PASSWORD_LOCAL")
 
+def driveOpen():
+    driver = GraphDatabase.driver(uri = os.environ["NEO4J_URI_LOCAL"], 
+                              auth = (os.environ["NEO4J_USERNAME_LOCAL"],os.environ["NEO4J_PASSWORD_LOCAL"]))
+    return driver
+driver = driveOpen()
 
-# URI = os.getenv("NEO4J_URI")
-# USER = os.getenv("NEO4J_USERNAME")
-# PASSWORD = os.getenv("NEO4J_PASSWORD")
-# parsed = urlparse(URI)
+def test_connection(tx):
+    result = tx.run("RETURN 'Connection Successful' AS message")
+    for record in result:
+        print(record["message"])
 
-
-# print("Host (instance) name:", parsed.hostname)
-
-# driver = GraphDatabase.driver(URI, auth=(USER, PASSWORD))
-
-# def test_connection(tx):
-#     result = tx.run("RETURN 'Connection Successful' AS message")
-#     for record in result:
-#         print(record["message"])
-
-# with driver.session() as session:
-#     session.execute_read(test_connection)
-
-# driver.close()
-
-from neo4j import GraphDatabase
-
-URI = "bolt://localhost:7687"
-USER = "neo4j"
-PASSWORD = "xcQAbjjhUJjRCDDhvhpv5mhvt4SyQcXnNYOHHmAWbyc"  # Replace with your actual password
-
+with driver.session() as session:
+    session.execute_read(test_connection)
 
 def verify_gds():
-    driver = GraphDatabase.driver(
-        "bolt://localhost:7687",
-        auth=("neo4j", PASSWORD)
-    )
     try:
         with driver.session() as session:
             result = session.run("CALL gds.list() YIELD name RETURN count(name)")
@@ -51,5 +33,7 @@ def verify_gds():
         driver.close()
 
 print(verify_gds())
+
+driver.close()
 
 # test_connection()

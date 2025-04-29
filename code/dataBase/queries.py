@@ -10,15 +10,15 @@ load_dotenv()
 
 def neo4j():
     return Neo4jGraph(
-        url=os.environ["NEO4J_URI"],
-        username=os.environ["NEO4J_USERNAME"],
-        password=os.environ["NEO4J_PASSWORD"]
+        url=os.environ["NEO4J_URI_LOCAL"],
+        username=os.environ["NEO4J_USERNAME_LOCAL"],
+        password=os.environ["NEO4J_PASSWORD_LOCAL"]
     )
 
 
 def driveOpen():
-    driver = GraphDatabase.driver(uri = os.environ["NEO4J_URI"], 
-                              auth = (os.environ["NEO4J_USERNAME"],os.environ["NEO4J_PASSWORD"]))
+    driver = GraphDatabase.driver(uri = os.environ["NEO4J_URI_LOCAL"], 
+                              auth = (os.environ["NEO4J_USERNAME_LOCAL"],os.environ["NEO4J_PASSWORD_LOCAL"]))
     return driver
 
 def clearDatabase(tx):
