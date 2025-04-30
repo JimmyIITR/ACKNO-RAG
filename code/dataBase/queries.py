@@ -140,10 +140,18 @@ def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -
 
     response = graph.query(
         """
-        MATCH (a)-[r]-(b)
+        MATCH path = (a)-[rels*..10]-(b)
         WHERE a.id = $id1 AND b.id = $id2
-          AND type(r) <> 'MENTIONS'
-        RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
+        WITH nodes(path) AS nodes, rels
+        RETURN 
+        REDUCE(
+            s = CASE WHEN 'Document' IN LABELS(HEAD(nodes)) 
+                    THEN 'Document' ELSE HEAD(nodes).id END,
+            i IN RANGE(0, size(rels)-1) | 
+            s + ' - ' + type(rels[i]) + ' - ' + 
+            CASE WHEN 'Document' IN LABELS(nodes[i+1]) 
+                THEN 'Document' ELSE nodes[i+1].id END
+        ) AS output
         """,
         params={"id1": id1, "id2": id2}
     )
@@ -232,141 +240,51 @@ def bridgeNodeConnector(graph, centralityThreshold: float = 1.0, bridgeLimit: in
     except Exception as e:
         return f"Connection error: {str(e)}"
     
-def autoGraphConnector(graph) -> str:
+def autoGraphConnector(graph, relationship_type: str = 'BRIDGED') -> str:
     """
-    Automatically connects graph components using GDS with validated syntax
+    Connects all graph components by projecting with GDS, streaming WCC,
+    and merging BRIDGED relationships between representative nodes.
     """
-    connector_query = """
-    // 1. Verify GDS installation
-    CALL gds.list() 
-    YIELD name 
-    WITH count(*) AS gdsAvailable
-    WHERE gdsAvailable > 0
-    
-    // 2. Create temporary in-memory graph
+
+    # 1. Drop and re-project using gds.graph.project
+    graph.query("CALL gds.graph.drop('entityGraph', false)")
+    graph.query("""
     CALL gds.graph.project(
-        'bridgingGraph',
-        { 
-            __Entity__: { 
-                properties: 'id' 
-            } 
-        },
-        { 
-            REL: { 
-                orientation: 'UNDIRECTED',
-                properties: ['weight']
-            },
-            MENTIONS: { 
-                orientation: 'NATURAL' 
-            }
+      'entityGraph',
+      ['__Entity__'],
+      {
+        MENTIONS: {
+          type: 'MENTIONS',
+          orientation: 'UNDIRECTED'
         }
+      }
     )
-    
-    // 3. Find weakly connected components
-    CALL gds.wcc.stream('bridgingGraph')
+    """)
+
+    # 2. Stream weakly connected components
+    components = graph.query("""
+    CALL gds.wcc.stream('entityGraph')
     YIELD nodeId, componentId
-    WITH componentId, collect(gds.util.asNode(nodeId)) AS componentNodes
-    ORDER BY size(componentNodes) DESC
-    
-    // 4. Process components in pairs
-    WITH collect(componentNodes) AS components
-    UNWIND range(0, size(components)-2) AS i
-    UNWIND range(i+1, size(components)-1) AS j
-    WITH components[i] AS compA, components[j] AS compB
-    
-    // 5. Find optimal bridge paths
-    CALL {
-        WITH compA, compB
-        UNWIND compA[0..5] AS a  // Limit component sampling
-        UNWIND compB[0..5] AS b
-        MATCH path = shortestPath((a)-[*..6]-(b))
-        WHERE NONE(rel IN relationships(path) WHERE type(rel) = 'MENTIONS')
-        RETURN nodes(path) AS bridgeNodes
-        ORDER BY length(path)
-        LIMIT 1
-    }
-    
-    // 6. Create bridge relationships (fixed syntax)
-    WITH bridgeNodes
-    WHERE bridgeNodes IS NOT NULL AND size(bridgeNodes) > 1
-    WITH bridgeNodes[0] AS a, bridgeNodes[-1] AS b
-    MERGE (a)-[:BRIDGED]->(b)
+    WITH componentId, collect(gds.util.asNode(nodeId).id) AS members
+    RETURN componentId, members
+    """)
 
-    // // 7. Cleanup
-    // CALL gds.graph.drop('bridgingGraph')
-    // RETURN count(*) AS bridgesCreated
-    
-    """
-    
-    try:
-        # Verify GDS installation first
-        # graph.query("CALL gds.list() YIELD name LIMIT 1")
-        
-        # Execute the bridging process
-        result = graph.query(connector_query)
-        bridges = result[0]["bridgesCreated"] if result else 0
-        
-        return f"Created {bridges} strategic bridge connections"
-        
-    except Exception as e:
-        return f"Connection error: {str(e)}"
-    
+    # 3. If already connected, exit early
+    if len(components) <= 1:
+        return "Graph is already fully connected."
 
-def autoGraphConnector2(graph) -> str:
-    """
-    Automatically connects disconnected components in the graph using GDS.
-    """
-    try:
-        # 1. Drop existing in-memory graph if it exists
-        graph.query("CALL gds.graph.drop('bridgingGraph', false) YIELD graphName")
+    # 4. Choose the first member of each component as representative
+    reps = [comp['members'][0] for comp in components]
+    created_edges = []
 
-        # 2. Create in-memory graph using Cypher projection
-        graph.query("""
-        CALL gds.graph.project.cypher(
-            'bridgingGraph',
-            'MATCH (n:__Entity__) RETURN id(n) AS id',
-            'MATCH (n:__Entity__)-[r]->(m:__Entity__) RETURN id(n) AS source, id(m) AS target, type(r) AS type'
-        )
-        """)
+    # 5. Merge bridging relationships between consecutive reps
+    for i in range(len(reps) - 1):
+        id1, id2 = reps[i], reps[i+1]
+        result = graph.query(f"""
+        MATCH (a {{id: $id1}}), (b {{id: $id2}})
+        MERGE (a)-[r:{relationship_type}]->(b)
+        RETURN a.id AS from, b.id AS to
+        """, {'id1': id1, 'id2': id2})
+        created_edges.append(f"{result[0]['from']} -[:{relationship_type}]-> {result[0]['to']}")
 
-        # 3. Compute weakly connected components
-        components = graph.query("""
-        CALL gds.wcc.stream('bridgingGraph')
-        YIELD nodeId, componentId
-        RETURN gds.util.asNode(nodeId).id AS nodeId, componentId
-        """)
-
-        # 4. Identify disconnected components
-        component_map = {}
-        for record in components:
-            comp_id = record['componentId']
-            node_id = record['nodeId']
-            component_map.setdefault(comp_id, []).append(node_id)
-
-        if len(component_map) <= 1:
-            return "Graph is already connected."
-
-        # 5. Connect components by creating bridge relationships
-        bridge_count = 0
-        comp_ids = list(component_map.keys())
-        for i in range(len(comp_ids)):
-            for j in range(i + 1, len(comp_ids)):
-                comp_a_nodes = component_map[comp_ids[i]]
-                comp_b_nodes = component_map[comp_ids[j]]
-                # Select representative nodes from each component
-                node_a = comp_a_nodes[0]
-                node_b = comp_b_nodes[0]
-                # Create bridge relationship
-                graph.query("""
-                MATCH (a:__Entity__ {id: $id1}), (b:__Entity__ {id: $id2})
-                MERGE (a)-[:BRIDGED]->(b)
-                """, {"id1": node_a, "id2": node_b})
-                bridge_count += 1
-
-        # 6. Drop the in-memory graph
-        graph.query("CALL gds.graph.drop('bridgingGraph') YIELD graphName")
-
-        return f"Created {bridge_count} bridge connections to unify the graph."
-
-    except Exception as e:
-        return f"Connection error: {str(e)}"
+    return "autoGraphConnector created connections:\n" + "\n".join(created_edges)

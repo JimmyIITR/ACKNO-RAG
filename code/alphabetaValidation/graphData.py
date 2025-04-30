@@ -2,19 +2,13 @@ import sys
 from os.path import dirname, join, abspath
 sys.path.insert(0, abspath(join(dirname(__file__), '..'))) 
 
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_experimental.graph_transformers import LLMGraphTransformer
-from langchain_community.vectorstores import Neo4jVector
 from langchain_community.document_loaders import TextLoader
-from langchain_ollama import OllamaEmbeddings
-from langchain_core.runnables import RunnableLambda
-from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from dataBase import queries
 from langchain_ollama import ChatOllama
-import prompts
-import articleExtrection
+import json
+from datetime import datetime
 from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
 
 from dotenv import load_dotenv
@@ -68,7 +62,23 @@ def extract_counts(paths_str):
         counts.append(intermediate)
     return counts, len(paths)
 
-def dataGeneratorForLogistic(graph, result):
+def log_entry(index, message, data=None, status="info"):
+    """Helper function to log messages and data to a JSONL file."""
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "index": index,
+        "status": status,
+        "message": message,
+        "data": data
+    }
+    try:
+        with open("data_ingestion_log.jsonl", "a") as log_file:
+            log_file.write(json.dumps(entry) + "\n")
+    except Exception as e:
+        print(f"Failed to write log entry: {str(e)}")
+
+
+def dataGeneratorForLogistic(graph, result, index):
     """ result = {true: [], false: [], combined: []} """
     #below lines are incomplete
     true_nodes = result["true"]
@@ -83,7 +93,7 @@ def dataGeneratorForLogistic(graph, result):
         for en2 in true_nodes[i+1:]:
             print(en1, en2)
             paths_str = queries.twoNodeConnection(en1, en2, combined, graph)
-            print(paths_str)
+            # log_entry(index, f"{en1}-{en2}", data=paths_str)
             counts, num_paths = extract_counts(paths_str)
             tt_horiz.extend(counts)
             tt_vert.append(num_paths)
@@ -93,7 +103,7 @@ def dataGeneratorForLogistic(graph, result):
         for en2 in false_nodes:
             print(en1, en2)
             paths_str = queries.twoNodeConnection(en1, en2, combined, graph)
-            print(paths_str)
+            # log_entry(index, f"{en1}-{en2}", data=paths_str)
             counts, num_paths = extract_counts(paths_str)
             tf_horiz.extend(counts)
             tf_vert.append(num_paths)
@@ -106,26 +116,25 @@ def dataGeneratorForLogistic(graph, result):
     }
 
 def handleDataIngestion(index=1):
-    print(f"Loading and processing data for {index}")
+    log_entry(index, f"Loading and processing data for {index}")
     trueDocuements = loadData(FACT_DATA)
     llmModel, graphDocuments = processLLM(trueDocuements)
     trueNodes = getNodesListIDs(graphDocuments)
-    print(f"FACT data completeted for {index}")
-    print(trueNodes) ## temp
-    print(trueNodes)
+    log_entry(index, f"FACT data completed for {index}")
+    log_entry(index, "True Nodes data", data=trueNodes)
+    
     falseDocuments = loadData(FALSE_FACT_DATA)
     llmModel, graphDocuments = processLLM(falseDocuments)
     falseNodes = getNodesListIDs(graphDocuments)
-    print(f"FALSE data completeted for {index}")
-    print(falseNodes) ## temp
-    print(falseNodes)
+    log_entry(index, f"FALSE data completed for {index}")
+    log_entry(index, "False Nodes data", data=falseNodes)
 
-    #new combiend data graph generation
     combinedData = trueDocuements + falseDocuments
     llmModel, graphDocuments = processLLM(combinedData)
-    print(f"Combined data completeted for {index}")
+    log_entry(index, f"Combined data completed for {index}")
     combinedNodes = getNodesListIDs(graphDocuments)
-    print(combinedNodes) ## temp
+    log_entry(index, "Combined Nodes data (temp)", data=combinedNodes)
+    
     result = {
         "true": trueNodes,
         "false": falseNodes,
@@ -135,31 +144,31 @@ def handleDataIngestion(index=1):
     driver = queries.driveOpen()
     try:
         queries.clearDataWithIndex(driver)
-        print(f"Database Cleaned Successfuly.")
+        log_entry(index, "Database Cleaned Successfully.")
     except Exception as e:
-         print(f"Data Clean error : {str(e)}")
+        log_entry(index, f"Data Clean error : {str(e)}", status="error")
     finally:
         queries.driveClose(driver)
-    #add data to database
-    addToGraph(graph, graphDocuments) 
-    print(f"Data added to Graph for {index}")
     
-    #create index of the database
+    addToGraph(graph, graphDocuments)
+    log_entry(index, f"Data added to Graph for {index}")
+    
     driver = queries.driveOpen()
     try:
         queries.createIndex(driver)
-        print("Indexing created successfully.")
+        log_entry(index, "Indexing created successfully.")
     except Exception as e:
-        print(f"Index creation skipped: {str(e)}")
+        log_entry(index, f"Index creation skipped: {str(e)}", status="error")
     finally:
         queries.driveClose(driver)
-    print("Data ingestion completed successfully!\n")
-    queries.graphSetup(graph)
-    print(f"Graph Setup for {index}")
-    queries.autoGraphConnector(graph)
-    print(f"Graph auto connector for {index}")
-    res = dataGeneratorForLogistic(graph, result)
-    print(f"response genereted for {index}")
+    
+    log_entry(index, "Data ingestion completed successfully!")
+    t1 = queries.graphSetup(graph)
+    log_entry(index, f"Graph Setup for {index}", t1)
+    t2 = queries.autoGraphConnector(graph)
+    log_entry(index, f"Graph auto connector for {index}", t2)
+    res = dataGeneratorForLogistic(graph, result, index)
+    log_entry(index, f"Response generated for {index}", res)
     return res
 
 
@@ -171,7 +180,7 @@ if __name__ == "__main__":
     # ans = queries.graphSetup(graph)
     # print(ans)
     # print("----------------\n setupDone")
-    # bridges = queries.autoGraphConnector2(graph)
+    # bridges = queries.autoGraphConnector(graph)
     # print(bridges)
     # print("----------------\n Bridge connected")
     # result_small = {
