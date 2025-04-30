@@ -5,6 +5,7 @@ import os
 from dotenv import load_dotenv
 from itertools import combinations
 from typing import List, Dict
+import time
 
 load_dotenv()
 
@@ -115,136 +116,6 @@ def matchNodeRetriver(question: str, entityChain, graph) -> str:
                 
     return result
 
-def setupGdsCentrality(graph, graph_name: str = "knowledgeGraph"):
-    """
-    Initial setup for Betweenness Centrality calculation
-    Run this ONCE before using bridgeNodeConnector
-    """
-    setup_queries = [
-        # Check GDS installation
-        "CALL gds.list() YIELD libraryVersion RETURN libraryVersion",
-        
-        # Create graph projection
-        f"""CALL gds.graph.project(
-            '{graph_name}',
-            '*',
-            {{
-                ALL: {{ 
-                    type: '*', 
-                    orientation: 'UNDIRECTED' 
-                }}
-            }}
-        )""",
-        
-        # Calculate centrality scores
-        f"""CALL gds.betweenness.stream('{graph_name}')
-        YIELD nodeId, score
-        MATCH (n)
-        WHERE id(n) = nodeId
-        SET n.centralityScore = score
-        RETURN count(n) AS updatedNodes""",
-        
-        # Drop projection (optional)
-        f"CALL gds.graph.drop('{graph_name}')"
-    ]
-    
-    results = []
-    for query in setup_queries:
-        try:
-            results.append(graph.query(query))
-        except Exception as e:
-            print(f"Setup error: {str(e)}")
-            raise
-    
-    return results
-
-def verifyCentrality(graph):
-    verify_query = """
-    MATCH (n)
-    WHERE EXISTS(n.centralityScore)
-    RETURN count(n) AS nodesWithScore
-    """
-    return graph.query(verify_query)
-
-def bridgeNodeConnector(graph, centralityThreshold: float = 0.7, bridgeLimit: int = 3) -> str:
-    """
-    Connects isolated subgraphs using high-centrality bridge nodes
-    """
-    bridgeQuery = """
-    // 1. Find disconnected node pairs with valid scores
-    MATCH (a), (b)
-    WHERE a <> b 
-      AND NOT EXISTS((a)-[*1..3]-(b))
-      AND EXISTS(a.centralityScore)
-      AND EXISTS(b.centralityScore)
-    
-    // 2. Subquery with proper variable scope
-    CALL {
-      WITH a, b
-      MATCH path = shortestPath((a)-[*..6]-(b))
-      WHERE ALL(rel IN relationships(path) WHERE type(rel) <> 'MENTIONS'
-      WITH path, 
-           [n IN nodes(path)[1..-1] WHERE n.centralityScore >= $centralityThreshold] AS bridgeNodes
-      UNWIND bridgeNodes AS bridgeNode
-      RETURN bridgeNode, relationships(path) AS rels
-      ORDER BY bridgeNode.centralityScore DESC
-      LIMIT 1
-    }
-    
-    // 3. Safe relationship formatting
-    WITH a, b, bridgeNode, rels,
-         CASE WHEN size(rels) > 0 THEN type(rels[0]) ELSE 'UNKNOWN' END AS rel1,
-         CASE WHEN size(rels) > 1 THEN type(rels[-1]) ELSE 'UNKNOWN' END AS rel2
-    
-    RETURN DISTINCT
-      COALESCE(a.name, '') + ' -[' + rel1 + ']-> ' +
-      COALESCE(bridgeNode.name, '') + ' -[' + rel2 + ']-> ' +
-      COALESCE(b.name, '') AS connection
-    LIMIT $bridgeLimit
-    """
-    
-    params = {
-        "centralityThreshold": centralityThreshold,
-        "bridgeLimit": bridgeLimit
-    }
-    
-    try:
-        result = graph.query(bridgeQuery, params)
-        return '\n'.join([rec.get('connection', '') for rec in result])
-    except Exception as e:
-        return f"Bridge connection error: {str(e)}"
-
-
-# def matchNodeRetriver(en1: str, en2: str, combinedNodesName, graph) -> str:
-#     result = ""
-#     # make mapping of node and name 
-#     entity_nodes = {}
-#     for entity in combinedNodesName:
-#         node_query = """
-#         CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
-#         YIELD node
-#         RETURN node.id AS id
-#         """
-#         response = graph.query(node_query, {"query": entity})
-#         if response:
-#             entity_nodes[entity] = response[0]['id']
-#     # just a verificaiotin before calling 
-#     try:
-#         id1 = entity_nodes[en1]
-#         id2 = entity_nodes[en2]
-#     except KeyError as e:
-#         raise ValueError(f"Entity {e.args[0]!r} not found in entity_nodes") from None
-#     # final call for database
-#     relationship_query = """
-#     MATCH (a)-[r:!MENTIONS]-(b)
-#     WHERE a.id = $id1 AND b.id = $id2
-#     RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
-#     """
-#     response = graph.query(relationship_query, {"id1": id1, "id2": id2})
-#     for rec in response:
-#         result += rec['output'] + "\n"
-                
-#     return result
 def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
     entityNode: Dict[str, str] = {}
     
@@ -279,46 +150,223 @@ def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -
 
     return "\n".join(rec["output"] for rec in response)
 
+def graphSetup(graph) -> str:
+    """
+    Prepares the graph for bridge detection using native Cypher
+    Aligns with your existing index patterns and id properties
+    """
+    setup_queries = [
+        # Centrality calculation using relationship count
+        ("""
+        MATCH (n)
+        SET n.centralityScore = SIZE([(n)-[]->() | 1])
+        RETURN count(n) AS scoredNodes
+        """, "Centrality calculation"),
 
-# def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
-#     entityNode: Dict[str, str] = {}
+        # Ensure ID property exists
+        ("""
+        MATCH (n) WHERE n.id IS NULL
+        SET n.id = COALESCE(n.name, 'Node_' + elementId(n))
+        RETURN count(n) AS idFixed
+        """, "ID property setup"),
+
+        # Index for bridge connections
+        ("""CREATE INDEX IF NOT EXISTS FOR (n:__Entity__) ON (n.centralityScore)""", 
+         "Centrality index")
+    ]
+
+    results = []
+    for query, desc in setup_queries:
+        result = graph.query(query)
+        results.append(f"{desc}: {result}")
+    return "Setup completed:\n" + "\n".join(results)
+
+def bridgeNodeConnector(graph, centralityThreshold: float = 1.0, bridgeLimit: int = 5) -> str:
+    """
+    Creates bridge connections using your existing ID property
+    and avoids MENTIONS relationships
+    """
+    bridgeQuery = """
+    MATCH (a), (b)
+    WHERE a.id <> b.id
+      AND NOT (a)-[*1..3]-(b)
+      AND a.centralityScore >= $ct
+      AND b.centralityScore >= $ct
+    CALL {
+      WITH a, b
+      OPTIONAL MATCH path = shortestPath((a)-[*..6]-(b))
+      WHERE ALL(rel IN relationships(path) WHERE type(rel) <> 'MENTIONS')
+      WITH [n IN nodes(path)[1..-1] | n] AS candidates
+      UNWIND candidates AS candidate
+      RETURN candidate ORDER BY candidate.centralityScore DESC LIMIT 1
+    }
+    WITH a, b, candidate
+    WHERE candidate IS NOT NULL
+    MERGE (a)-[r:BRIDGED]->(b)
+    SET r.bridgeNode = candidate.id,
+        r.score = candidate.centralityScore
+    RETURN a.id + ' -[:BRIDGED]-> ' + b.id + ' via ' + candidate.id AS connection
+    LIMIT $limit
+    """
     
-#     # Node ID lookup remains the same
-#     for name in combinedNodesName:
-#         node_query = """
-#         CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
-#         YIELD node
-#         RETURN node.id AS id
-#         """
-#         result = graph.query(node_query, {"query": escapeLuceneQuery(name)})
-#         if result:
-#             entityNode[name] = result[0]["id"]
+    try:
+        # Validate setup using your existing patterns
+        valid = graph.query("""
+            MATCH (n) 
+            RETURN 
+                n.id IS NOT NULL AS hasId,
+                n.centralityScore IS NOT NULL AS hasScore
+            LIMIT 1
+            """)[0]
+        
+        if not valid["hasId"] or not valid["hasScore"]:
+            return "Run graphSetup() first!"
 
-#     if en1 not in entityNode or en2 not in entityNode:
-#         return f"{en1} - R - {en2}"
+        result = graph.query(bridgeQuery, {
+            "ct": centralityThreshold,
+            "limit": bridgeLimit
+        })
+        
+        return "Connections:\n" + '\n'.join([rec['connection'] for rec in result]) if result else "No bridges found"
+        
+    except Exception as e:
+        return f"Connection error: {str(e)}"
     
-#     id1, id2 = entityNode[en1], entityNode[en2]
+def autoGraphConnector(graph) -> str:
+    """
+    Automatically connects graph components using GDS with validated syntax
+    """
+    connector_query = """
+    // 1. Verify GDS installation
+    CALL gds.list() 
+    YIELD name 
+    WITH count(*) AS gdsAvailable
+    WHERE gdsAvailable > 0
+    
+    // 2. Create temporary in-memory graph
+    CALL gds.graph.project(
+        'bridgingGraph',
+        { 
+            __Entity__: { 
+                properties: 'id' 
+            } 
+        },
+        { 
+            REL: { 
+                orientation: 'UNDIRECTED',
+                properties: ['weight']
+            },
+            MENTIONS: { 
+                orientation: 'NATURAL' 
+            }
+        }
+    )
+    
+    // 3. Find weakly connected components
+    CALL gds.wcc.stream('bridgingGraph')
+    YIELD nodeId, componentId
+    WITH componentId, collect(gds.util.asNode(nodeId)) AS componentNodes
+    ORDER BY size(componentNodes) DESC
+    
+    // 4. Process components in pairs
+    WITH collect(componentNodes) AS components
+    UNWIND range(0, size(components)-2) AS i
+    UNWIND range(i+1, size(components)-1) AS j
+    WITH components[i] AS compA, components[j] AS compB
+    
+    // 5. Find optimal bridge paths
+    CALL {
+        WITH compA, compB
+        UNWIND compA[0..5] AS a  // Limit component sampling
+        UNWIND compB[0..5] AS b
+        MATCH path = shortestPath((a)-[*..6]-(b))
+        WHERE NONE(rel IN relationships(path) WHERE type(rel) = 'MENTIONS')
+        RETURN nodes(path) AS bridgeNodes
+        ORDER BY length(path)
+        LIMIT 1
+    }
+    
+    // 6. Create bridge relationships (fixed syntax)
+    WITH bridgeNodes
+    WHERE bridgeNodes IS NOT NULL AND size(bridgeNodes) > 1
+    WITH bridgeNodes[0] AS a, bridgeNodes[-1] AS b
+    MERGE (a)-[:BRIDGED]->(b)
 
-#     # Modified query with degree check
-#     response = graph.query(
-#         """
-#         MATCH (a {id: $id1}), (b {id: $id2})
-#         WITH a, b, 
-#             size([(a)-[r]-(c) WHERE type(r) <> 'MENTIONS' | r]) AS a_degree,
-#             size([(b)-[r]-(d) WHERE type(r) <> 'MENTIONS' | r]) AS b_degree
-#         WHERE a_degree > 3 OR b_degree > 3
-#         MATCH (a)-[r]-(b)
-#         WHERE type(r) <> 'MENTIONS'
-#         RETURN DISTINCT a.id + ' - ' + type(r) + ' - ' + b.id AS output
-#         """,
-#         params={"id1": id1, "id2": id2}
-#     )
+    // // 7. Cleanup
+    // CALL gds.graph.drop('bridgingGraph')
+    // RETURN count(*) AS bridgesCreated
+    
+    """
+    
+    try:
+        # Verify GDS installation first
+        # graph.query("CALL gds.list() YIELD name LIMIT 1")
+        
+        # Execute the bridging process
+        result = graph.query(connector_query)
+        bridges = result[0]["bridgesCreated"] if result else 0
+        
+        return f"Created {bridges} strategic bridge connections"
+        
+    except Exception as e:
+        return f"Connection error: {str(e)}"
+    
 
-#     return "\n".join(rec["output"] for rec in response) if response else ""
-# def generate_full_text_query(input: str) -> str:
-#     words = [el for el in remove_lucene_chars(input).split() if el]
-#     if not words:
-#         return ""
-#     full_text_query = " AND ".join([f"{word}~2" for word in words])
-#     print(f"Generated Query: {full_text_query}")
-#     return full_text_query.strip()
+def autoGraphConnector2(graph) -> str:
+    """
+    Automatically connects disconnected components in the graph using GDS.
+    """
+    try:
+        # 1. Drop existing in-memory graph if it exists
+        graph.query("CALL gds.graph.drop('bridgingGraph', false) YIELD graphName")
+
+        # 2. Create in-memory graph using Cypher projection
+        graph.query("""
+        CALL gds.graph.project.cypher(
+            'bridgingGraph',
+            'MATCH (n:__Entity__) RETURN id(n) AS id',
+            'MATCH (n:__Entity__)-[r]->(m:__Entity__) RETURN id(n) AS source, id(m) AS target, type(r) AS type'
+        )
+        """)
+
+        # 3. Compute weakly connected components
+        components = graph.query("""
+        CALL gds.wcc.stream('bridgingGraph')
+        YIELD nodeId, componentId
+        RETURN gds.util.asNode(nodeId).id AS nodeId, componentId
+        """)
+
+        # 4. Identify disconnected components
+        component_map = {}
+        for record in components:
+            comp_id = record['componentId']
+            node_id = record['nodeId']
+            component_map.setdefault(comp_id, []).append(node_id)
+
+        if len(component_map) <= 1:
+            return "Graph is already connected."
+
+        # 5. Connect components by creating bridge relationships
+        bridge_count = 0
+        comp_ids = list(component_map.keys())
+        for i in range(len(comp_ids)):
+            for j in range(i + 1, len(comp_ids)):
+                comp_a_nodes = component_map[comp_ids[i]]
+                comp_b_nodes = component_map[comp_ids[j]]
+                # Select representative nodes from each component
+                node_a = comp_a_nodes[0]
+                node_b = comp_b_nodes[0]
+                # Create bridge relationship
+                graph.query("""
+                MATCH (a:__Entity__ {id: $id1}), (b:__Entity__ {id: $id2})
+                MERGE (a)-[:BRIDGED]->(b)
+                """, {"id1": node_a, "id2": node_b})
+                bridge_count += 1
+
+        # 6. Drop the in-memory graph
+        graph.query("CALL gds.graph.drop('bridgingGraph') YIELD graphName")
+
+        return f"Created {bridge_count} bridge connections to unify the graph."
+
+    except Exception as e:
+        return f"Connection error: {str(e)}"

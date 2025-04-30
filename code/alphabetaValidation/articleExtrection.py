@@ -54,7 +54,7 @@ def tokenize(text):
 
 def main(k=1):
     session = getSession()
-    d = getIthDataFromTrainData(k,2) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
+    d = getIthDataFromTrainData(k,1) # experiment shows that 7 is the value for mixup and 1 is number of samples needed
     #7 is the ideal as we can see from hyperparameter training of gaama but then prompt is getting bigger which is unable to handel by LLM so taking 2 only for now
     res = ""
     for data in d: #working as if condition for now
@@ -63,7 +63,7 @@ def main(k=1):
         res = data["main_claim"]["text"]
         urlSelf = data["main_claim"]["fact_checking_article"]
         urlOther = []
-        for i in range(0,2):
+        for i in range(0,1):
             urlOther.append(data["related_articles"][i]["fact_checking_article"])
        
         falseFactText = ""
