@@ -18,7 +18,7 @@ def tempFileFalseFactText():
     return abspath(join(dirname(__file__), './dataBase/temp/falseFactText.txt'))
 
 def resultsAlphaBeta(i=0):
-    return abspath(join(dirname(__file__), f'../result/alphaBeta/results{i}.json'))
+    return abspath(join(dirname(__file__), f'../results/alphaBeta/results{i}.json'))
 
 def resultGamma(i=0):
     return abspath(join(dirname(__file__), f'../results/gamma/results{i}.csv'))
@@ -31,3 +31,6 @@ def getTrainAVeriTecData():
 
 def getDevAVeriTecData():
     return abspath(join(dirname(__file__), f'../data/AVeriTecData/dataDev.json'))
+
+def dataInLogs():
+    return abspath(join(dirname(__file__), f'../results/data_ingestion_log.jsonl')) #data_ingestion_log.jsonl
