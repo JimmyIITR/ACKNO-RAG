@@ -4,3 +4,5 @@ packages
 code/dataBase/Neo4j-a9bf1f11-Created-2025-02-11.txt
 code/dataBase/Neo4j-48b5f2b8-Created-2025-04-01.txt
 results/data_ingestion_log.jsonl
+results/data_ingestion_log_2.jsonl
+data_ingestion_log.jsonl
