@@ -34,3 +34,6 @@ def getDevAVeriTecData():
 
 def dataInLogs():
     return abspath(join(dirname(__file__), f'../results/data_ingestion_log.jsonl')) #data_ingestion_log.jsonl
+
+def dataInLogsMain():
+    return abspath(join(dirname(__file__), f'../data_ingestion_log.jsonl')) #data_ingestion_log.jsonl

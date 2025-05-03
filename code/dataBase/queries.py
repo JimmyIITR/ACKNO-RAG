@@ -140,15 +140,14 @@ def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -
 
     response = graph.query(
         """
-        MATCH path = (a)-[rels*..8]-(b)
+        MATCH path = shortestPath((a)-[*..20]-(b))
         WHERE a.id = $id1 AND b.id = $id2
-        WITH nodes(path) AS nodes, rels
-        LIMIT 3
+        WITH nodes(path) AS nodes, relationships(path) AS rels
         RETURN 
         REDUCE(
             s = CASE WHEN 'Document' IN LABELS(HEAD(nodes)) 
                     THEN 'Document' ELSE HEAD(nodes).id END,
-            i IN RANGE(0, size(rels)-1) | 
+            i IN RANGE(0, size(rels)-1 | 
             s + ' - ' + type(rels[i]) + ' - ' + 
             CASE WHEN 'Document' IN LABELS(nodes[i+1]) 
                 THEN 'Document' ELSE nodes[i+1].id END
