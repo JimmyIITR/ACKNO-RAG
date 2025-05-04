@@ -37,3 +37,6 @@ def dataInLogs():
 
 def dataInLogsMain():
     return abspath(join(dirname(__file__), f'../data_ingestion_log.jsonl')) #data_ingestion_log.jsonl
+
+def getStrData():
+    return abspath(join(dirname(__file__), f'../results/stringData.csv')) #data_ingestion_log.jsonl

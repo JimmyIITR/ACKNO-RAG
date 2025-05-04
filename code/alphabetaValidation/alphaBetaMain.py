@@ -56,7 +56,7 @@ def main():
 
     results_df = initialize_results(total)
 
-    for i in range(0,25,2):
+    for i in range(2,100,2):
         try:
             claim = articleExtrection.main(i)
             trueFalseRes = graphData.handleDataIngestion(i)
