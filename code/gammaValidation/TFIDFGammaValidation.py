@@ -3,7 +3,7 @@ from bs4 import BeautifulSoup
 from duckduckgo_search import DDGS
 import nltk
 import re
-from dataFetch import getCrossAndSelfURLsWithClaims
+from gammaValidation.dataFetch import getCrossAndSelfURLsWithClaims
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 

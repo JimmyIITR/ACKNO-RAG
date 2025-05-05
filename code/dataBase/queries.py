@@ -116,6 +116,52 @@ def matchNodeRetriver(question: str, entityChain, graph) -> str:
                 
     return result
 
+def getTwoEntpaths(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
+    entityNode: Dict[str, str] = {}
+    
+    for name in combinedNodesName:
+        node_query = """
+        CALL db.index.fulltext.queryNodes('fulltext_entity_id', $query, {limit:1})
+        YIELD node
+        RETURN node.id AS id
+        """
+        result = graph.query(node_query, {"query": escapeLuceneQuery(name)})
+        if result:
+            entityNode[name] = result[0]["id"]
+
+    if en1 not in entityNode:
+        return f"{en1} - R - {en2}"
+    if en2 not in entityNode:
+        return f"{en1} - R - {en2}"
+    if en1 == en2:
+        return f"{en1} - R - {en2}"
+    
+    id1, id2 = entityNode[en1], entityNode[en2]
+
+    try:
+        response = graph.query(
+            """
+            MATCH path = shortestPath((a)-[*..7]-(b))
+            WHERE a.id = $id1 AND b.id = $id2
+            WITH nodes(path) AS nodes, relationships(path) AS rels
+            RETURN 
+            REDUCE(
+                s = CASE WHEN 'Document' IN LABELS(HEAD(nodes)) 
+                        THEN 'Document' ELSE HEAD(nodes).id END,
+                i IN RANGE(0, size(rels)-1) | 
+                s + ' - ' + type(rels[i]) + ' - ' + 
+                CASE WHEN 'Document' IN LABELS(nodes[i+1]) 
+                    THEN 'Document' ELSE nodes[i+1].id END
+            ) AS output
+            """,
+            params={"id1": id1, "id2": id2}
+        )
+        if not response:
+            raise ValueError("no path found")
+        return "\n".join(rec["output"] for rec in response)
+    except Exception:
+        return f"{id1} - R - {id2}"
+
 def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -> str:
     entityNode: Dict[str, str] = {}
     
@@ -141,9 +187,9 @@ def twoNodeConnection(en1: str, en2: str, combinedNodesName: List[str], graph) -
     try:
         response = graph.query(
             """
-            MATCH path = shortestPath((a)-[*..20]-(b))
+            MATCH path = (a)-[rels*..7]-(b)
             WHERE a.id = $id1 AND b.id = $id2
-            WITH nodes(path) AS nodes, relationships(path) AS rels
+            WITH nodes(path) AS nodes, rels
             RETURN 
             REDUCE(
                 s = CASE WHEN 'Document' IN LABELS(HEAD(nodes)) 

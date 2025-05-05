@@ -4,7 +4,7 @@ from duckduckgo_search import DDGS
 from rank_bm25 import BM25Okapi
 import nltk
 import re
-from dataFetch import getCrossAndSelfURLsWithClaims
+from gammaValidation.dataFetch import getCrossAndSelfURLsWithClaims
 
 nltk.download('punkt')
 

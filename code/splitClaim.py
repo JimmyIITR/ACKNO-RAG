@@ -57,18 +57,18 @@ def processParagraph(paragraph: str):
     maxRetries = 3
     for attempt in range(maxRetries):
         claims = generateAtomicClaims(paragraph)
+        document = [paragraph]
         if claims:
             print("\nValidated Atomic Claims:")
             for i, claim in enumerate(claims, 1):
-                print(f"{i}. {claim}")
-            return
+                document.append(claim)
+                
+            return document
         print(f"Retry {attempt+1}/{maxRetries}...")
     
     print("Failed to generate valid claims after retries")
 
 if __name__ == "__main__":
-    testParagraph = (
-        "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
-    )
+    testParagraph = "Karnataka Congress Govt collects ₹445 Cr from temples but gifts ₹330 Cr to mosques & churches that pay no tax! Congress - The new age Mughal invaders who are looting our temples"
     
-    processParagraph(testParagraph)
+    print(processParagraph(testParagraph))

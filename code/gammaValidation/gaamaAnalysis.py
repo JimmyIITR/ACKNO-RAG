@@ -30,10 +30,11 @@ def getScore(model, kValue):
     coefficient = logReg.coef_[0][0]
     intercept = logReg.intercept_[0]
     thresholdNormalized = -intercept / coefficient
-    print(thresholdNormalized)
 
     threshold = scaler.inverse_transform([[thresholdNormalized]])[0][0]
-    print(f"Optimal threshold between valid and invalid scores: {threshold:.2f}") 
+    return threshold, thresholdNormalized
+
+
 
 def thresholdNormalized(model, kValue, score):
     valid = df[['BM25_2_first']].copy()
@@ -56,15 +57,24 @@ def thresholdNormalized(model, kValue, score):
     coefficient = logReg.coef_[0][0]
     intercept = logReg.intercept_[0]
     thresholdNormalized = -intercept / coefficient
-    print(thresholdNormalized)
 
     threshold = scaler.inverse_transform([[thresholdNormalized]])[0][0]
-    print(f"Optimal threshold between valid and invalid scores: {threshold:.2f}") 
     return thresholdNormalized
 
 if __name__ == "__main__":
-    model = "SBERT"
-    kValue = "10"
-    print(model, kValue)
-    tScore = getScore(model, kValue)
+    models = ["SBERT", "TFIDF", "BM25"]
+    for kValue in range(8,11):
+        for model in models:
+            tNormalizedScore,tScore  = getScore(model, kValue)
+            print(f"50*=")
+            print(model , kValue)
+            print(tScore, tNormalizedScore)
+            print(f"50*=")
+            
+    
+    # kValue = "10"
+    # print(model, kValue)
+    # tScore = getScore(model, kValue)
+    # tNormalScore = getThresholdRaw(model, kValue)
+    # print(tScore, tNormalScore)
     # accuracy = thresholdNormalized(model, kValue, tScore)

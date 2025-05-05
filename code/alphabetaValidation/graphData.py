@@ -10,7 +10,7 @@ from langchain_ollama import ChatOllama
 import json
 from datetime import datetime
 from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
-
+from abMain import handleDataIngestion
 from dotenv import load_dotenv
 
 load_dotenv()

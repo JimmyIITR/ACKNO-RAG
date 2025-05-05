@@ -40,3 +40,15 @@ def dataInLogsMain():
 
 def getStrData():
     return abspath(join(dirname(__file__), f'../results/stringData.csv')) #data_ingestion_log.jsonl
+
+def sbertDataPath():
+    return abspath(join(dirname(__file__), f'./dataBase/temp/gammaExtrected/SBERT.txt')) #data_ingestion_log.jsonl
+
+def tfidfDataPath():
+    return abspath(join(dirname(__file__), f'./dataBase/temp/gammaExtrected/TFIDF.txt')) #data_ingestion_log.jsonl
+
+def bm25DataPath():
+    return abspath(join(dirname(__file__), f'./dataBase/temp/gammaExtrected/BM25.txt')) #data_ingestion_log.jsonl
+
+def finalCSV():
+    return abspath(join(dirname(__file__), f'../results/finalCSV.csv')) 

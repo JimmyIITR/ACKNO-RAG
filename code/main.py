@@ -5,55 +5,34 @@ sys.path.insert(0, abspath(join(dirname(__file__), '..')))
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_experimental.graph_transformers import LLMGraphTransformer
 from langchain_community.vectorstores import Neo4jVector
-from langchain_community.document_loaders import TextLoader
 from langchain_ollama import OllamaEmbeddings
 from langchain_core.runnables import RunnableLambda
-# from langchain_experimental.llms.ollama_functions import OllamaFunctions
 from dataBase import queries
 import prompts
 from langchain_ollama import ChatOllama
 import selectData
+import splitClaim
+import pandas as pd
+import csv
+from gammaValidation import gammaMain
+from code.alphabetaValidation import abMain
+import queryLog
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
-DATA_PATH = selectData.dataPath()
+SBERT_DATA_PATH = selectData.sbertDataPath()
+TFIDF_DATA_PATH = selectData.tfidfDataPath()
+BM25_DATA_PATH = selectData.bm25DataPath()
 LLM_MODEL = selectData.llmModel()
 EMBEDDINGS_MODEL = selectData.embeddingModel()
-
-def loadData(dataPath):
-    """Load and split documents from specified path"""
-    textLoader = TextLoader(file_path=dataPath, autodetect_encoding=True)
-    rawDocs = textLoader.load()
-    textSplitter = RecursiveCharacterTextSplitter(
-        chunk_size=250, 
-        chunk_overlap=24
-    )
-    return textSplitter.split_documents(documents=rawDocs)
-
-def processLLM(docs):
-    """Process documents to create LLM instance and graph documents"""
-    # llm = OllamaFunctions(model=LLM_MODEL, temperature=0, format="json")
-    llm = ChatOllama(model=LLM_MODEL, temperature=0)
-    graphTransformer = LLMGraphTransformer(llm=llm)
-    graphDocs = graphTransformer.convert_to_graph_documents(docs)
-    return llm, graphDocs
-
-def addToGraph(graph, graphDocs):
-    """Add processed documents to Neo4j graph"""
-    graph.add_graph_documents(
-        graphDocs,
-        baseEntityLabel=True,
-        include_source=True
-    )
+RESULT_PATH = selectData.finalCSV() #csv file
+DATA_PATH = selectData.getTrainAVeriTecData() #json file
 
 def initializeEmbeddings():
-    """Initialize and return vector retriever"""
-    embeddingModel = OllamaEmbeddings(model=EMBEDDINGS_MODEL)
+    embeddingModel = OllamaEmbeddings(model=selectData.embeddingModel())
     vectorIndex = Neo4jVector.from_existing_graph(
         embedding=embeddingModel,
         search_type="hybrid",
@@ -63,93 +42,64 @@ def initializeEmbeddings():
     )
     return vectorIndex.as_retriever()
 
-def retrieveContext(question, vectorRetriever, entityChain, graph):
-    """Retrieve combined context from graph and vector store"""
-    graphData = queries.graphRetriever(question, entityChain, graph)
+def retrieveContext(question, vectorRetriever, graphData):
     vectorResults = [doc.page_content for doc in vectorRetriever.invoke(question)]
-    res = f"""Graph Data:
+    return f"""Graph Data:
 {graphData}
 
 Vector Data:
 {"#Document ".join(vectorResults)}"""
-    print(res)
-    return res
 
-def setupAnswerChain():
-    """Set up and return the question answering chain"""
+def setupAnswerChain(graphData):
     graph = queries.neo4j()
-    llm = ChatOllama(model=LLM_MODEL, temperature=0)
+    llm = ChatOllama(model=selectData.llmModel(), temperature=0)
     entityChain = llm.with_structured_output(prompts.Entities)
     vectorRetriever = initializeEmbeddings()
-    
     promptTemplate = ChatPromptTemplate.from_template(prompts.template)
+
     return (
         {
             "context": RunnableLambda(
-                lambda question: retrieveContext(
-                    question=question,
-                    vectorRetriever=vectorRetriever,
-                    entityChain=entityChain,
-                    graph=graph
-                )
+                lambda q: retrieveContext(q, vectorRetriever, graphData)
             ),
-            "question": RunnablePassthrough() 
+            "question": RunnablePassthrough()
         }
         | promptTemplate
         | llm
         | StrOutputParser()
     )
 
-def handleDataIngestion():
-    """Handle the data loading and graph population process"""
-    print("Loading and processing data...")
-    documents = loadData(DATA_PATH)
-    llmModel, graphDocuments = processLLM(documents)
-    
-    graph = queries.neo4j()
-    #try to clean whole data first
-    driver = queries.driveOpen()
-    try:
-        queries.clearDataWithIndex(driver)
-        print(f"Database Cleaned Successfuly.")
-    except Exception as e:
-         print(f"Data Clean error : {str(e)}")
-    finally:
-        queries.driveClose(driver)
-    #add data to database
-    addToGraph(graph, graphDocuments)
-    print("Data added to Graph")
-    #create index of the database
-    driver = queries.driveOpen()
-    try:
-        queries.createIndex(driver)
-        print("Indexing created successfully.")
-    except Exception as e:
-        print(f"Index creation skipped: {str(e)}")
-    finally:
-        queries.driveClose(driver)
-    print("Data ingestion completed successfully!\n")
+def main():
+    df = pd.read_json(DATA_PATH)
 
-def queryInterface(answerChain):
-    """Handle user queries in a loop"""
-    print("\nQuery system ready. Type 'exit' to quit.\n")
-    while True:
-        userInput = input("Enter your question: ").strip()
-        if userInput.lower() in ('exit', 'quit'):
-            break
-        if not userInput:
-            continue
-            
-        response = answerChain.invoke(userInput)
-        print("\nResponse:")
-        print(response)
-        print("\n" + "="*50 + "\n")
+    with open(RESULT_PATH, 'w', newline='', encoding='utf-8') as outf:
+        writer = csv.writer(outf)
+        writer.writerow(['index', 'claim', 'response'])
+
+    for idx, row in df.iterrows():
+        claim = row['claim']
+        queryLog.log_entry(idx, "START claim", data=claim)
+
+        atomicClaims = splitClaim.processParagraph(claim)
+        for sc in atomicClaims:
+            gammaMain.main(sc, idx)
+
+        queryLog.log_entry(idx, "Files Generated", data=None, status="info")
+        
+        graphData = abMain.main(selectData.sbertDataPath(), idx)
+
+        queryLog.log_entry(idx, "Graph generated", data=graphData, status="info")
+        
+        qaChain  = setupAnswerChain(graphData)
+        response = qaChain.invoke(claim)
+
+        with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
+            writer = csv.writer(outf)
+            writer.writerow([idx, claim, response])
+
+        queryLog.log_entry(idx, "SAVED result", data=response, status="info")
+
+    print("All done, results written to", RESULT_PATH)
 
 if __name__ == "__main__":
-    initialChoice = input("Initialize new data in graph? (yes/no): ").lower().strip()
-    if initialChoice == 'yes':
-        handleDataIngestion()
-    
-    qaChain = setupAnswerChain()
-    queryInterface(qaChain)
-    print("Session terminated.")
+    main()
