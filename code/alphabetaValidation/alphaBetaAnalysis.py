@@ -7,6 +7,7 @@ from os.path import dirname, join, abspath
 from sklearn.linear_model import LogisticRegression 
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import roc_curve, auc, classification_report
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
 from sklearn.preprocessing import StandardScaler
 import seaborn as sns
 from sklearn.svm import SVC ,LinearSVC
@@ -96,7 +97,7 @@ def plot_roc_curve(y_true, y_scores, label):
     plt.close()
 
 def analyze_with_svm(true_data, false_data, label):
-    """LinearSVC version with M1-compatible visualization"""
+    """LinearSVC version with metrics"""
     try:
         # Balance classes
         min_len = min(len(true_data), len(false_data))
@@ -104,30 +105,54 @@ def analyze_with_svm(true_data, false_data, label):
             print(f"Insufficient data for {label}")
             return None
             
-        # Create dataset
+        # Create dataset with shuffling
         X = np.concatenate([true_data[:min_len], false_data[:min_len]]).reshape(-1, 1)
         y = np.concatenate([np.zeros(min_len), np.ones(min_len)])
+        
+        # Shuffle data
+        shuffle_idx = np.random.permutation(len(y))
+        X, y = X[shuffle_idx], y[shuffle_idx]
         
         # Standardize
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        # Train LINEAR model
+        # Train/test split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X_scaled, y, test_size=0.2, random_state=42
+        )
+        
+        # Train model
         model = LinearSVC(class_weight='balanced', max_iter=10000)
-        model.fit(X_scaled, y)
+        model.fit(X_train, y_train)
         
-        # Get decision boundary (works for linear models)
-        decision_boundary = -model.intercept_[0]/model.coef_[0][0]
-        threshold = scaler.inverse_transform([[decision_boundary]])[0][0]
+        # Calculate threshold using model parameters
+        decision_boundary = -model.intercept_[0] / model.coef_[0][0]
+        threshold = scaler.inverse_transform([[decision_boundary]])[0][0]  
+        # threshold = 4.27
         
-        # Generate visualization with density plot
+        # Get predictions and scores
+        y_pred = model.predict(X_test)
+        y_scores = model.decision_function(X_test)
+        
+        # Calculate metrics
+        accuracy = accuracy_score(y_test, y_pred)
+        roc_auc = roc_auc_score(y_test, y_scores)
+        
+        print(f"\n{label} Performance:")
+        print(f"Accuracy: {accuracy:.2f}")
+        print(f"AUC: {roc_auc:.2f}")
+        print(classification_report(y_test, y_pred))
+        
+        # Plot ROC curve
+        plot_roc_curve(y_test, y_scores, label)
+        
+        # Plot distributions with threshold
         plt.figure(figsize=(10, 6), dpi=100)
-        
         sns.kdeplot(true_data, color='blue', label='True', fill=True)
         sns.kdeplot(false_data, color='red', label='False', fill=True)
         plt.axvline(threshold, color='green', linestyle='--', 
                    linewidth=2, label=f'Threshold: {threshold:.2f}')
-        
         plt.title(f'{label} Separation (Linear SVM)')
         plt.xlabel('Value')
         plt.ylabel('Density')
@@ -140,7 +165,7 @@ def analyze_with_svm(true_data, false_data, label):
     except Exception as e:
         print(f"{label} analysis error: {str(e)}")
         return None
-
+    
 def main():
     data = load_and_clean_data()
     
@@ -155,10 +180,6 @@ def main():
     print("\nHorizontal Separation:")
     hor_threshold = analyze_with_svm(data['true_hor'], data['false_hor'], 'Horizontal')
     print(f"Separation Threshold: {hor_threshold}")
-
-    print("\nVertical Separation:")
-    ver_threshold = analyze_with_svm(data['true_ver'], data['false_ver'], 'Vertical')
-    print(f"Separation Threshold: {ver_threshold}")
 
     del data
     gc.collect()
