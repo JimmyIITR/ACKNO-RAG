@@ -86,7 +86,7 @@ def main():
 
         queryLog.log_entry(idx, "Files Generated", data=None, status="info")
         
-        graphData = abMain.main(selectData.sbertDataPath(), idx)
+        graphData = abMain.main(claim, selectData.sbertDataPath(), idx)
 
         queryLog.log_entry(idx, "Graph generated", data=graphData, status="info")
         

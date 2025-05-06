@@ -87,6 +87,16 @@ def graphRetriever(question: str, entityChain, graph) -> str:
         result += "\n".join([el['output'] for el in response])
     return result
 
+def getAllNodeId(graph) -> List[str]:
+    response = graph.query(
+        """
+        MATCH (n)
+        WHERE n.id IS NOT NULL
+        RETURN n.id AS node_id
+        """
+    )
+    return [record['node_id'] for record in response]
+
 def matchNodeRetriver(question: str, entityChain, graph) -> str:
     result = ""
     

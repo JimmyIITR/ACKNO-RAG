@@ -12,6 +12,8 @@ from dataBase import queries
 from langchain_ollama import ChatOllama
 import json
 from datetime import datetime
+import selectData
+from langchain.schema import Document
 from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
 
 from dotenv import load_dotenv
@@ -45,6 +47,13 @@ def processLLM(docs):
     graphDocs = graphTransformer.convert_to_graph_documents(docs)
     return llm, graphDocs
 
+
+def processLLMFromText(text: str):
+    doc = Document(page_content=text)
+    llm, graphDocs = processLLM([doc])
+    return llm, graphDocs
+
+
 def addToGraph(graph, graphDocs):
     """Add processed documents to Neo4j graph"""
     graph.add_graph_documents(
@@ -57,10 +66,10 @@ def getNodesListIDs(graph_docs) -> list[str]:
     """Return a sorted list of all unique node IDs in the given GraphDocuments."""
     return sorted({ node.id for doc in graph_docs for node in doc.nodes })
 
-def getPathsforAllEntPairs(graph, entities, index=0):
+def getPathsforAllEntPairs(graph, entitiesOfClaim, entities, index=0):
     graphData = ""
-    for i, en1 in enumerate(entities):
-        for en2 in entities[i+1:]:
+    for i, en1 in enumerate(entitiesOfClaim):
+        for en2 in entitiesOfClaim[i+1:]:
             print(en1, en2)
             paths_str = queries.getTwoEntpaths(en1, en2, entities, graph)
             graphData = graphData + paths_str
@@ -82,17 +91,25 @@ def log_entry(index, message, data=None, status="info"):
     except Exception as e:
         print(f"Failed to write log entry: {str(e)}")
 
-def handleDataIngestion(PATH, index=0):
+def handleDataIngestion(claim, PATH, index=0):
     log_entry(index, f"Loading and processing data for {index}")
     document = loadData(PATH)
+    llmModel, graphDocuments = processLLMFromText(claim)
+    entitesOfClaim = getNodesListIDs(graphDocuments)
+
+    log_entry(index, f"BERT data completed for {index}")
+    log_entry(index, "Nodes data", data=entitesOfClaim)
+
     llmModel, graphDocuments = processLLM(document)
     entites = getNodesListIDs(graphDocuments)
-    log_entry(index, f"FACT data completed for {index}")
-    log_entry(index, "True Nodes data", data=entites)
+  
+    log_entry(index, f"BERT data completed for {index}")
+    log_entry(index, "Nodes data", data=entites)
 
   
     graph = queries.neo4j()
     driver = queries.driveOpen()
+    # entites = queries.getAllNodeId(graph) #temp
     try:
         queries.clearDataWithIndex(driver)
         log_entry(index, "Database Cleaned Successfully.")
@@ -118,13 +135,15 @@ def handleDataIngestion(PATH, index=0):
     log_entry(index, f"Graph Setup for {index}", t1)
     t2 = queries.autoGraphConnector(graph)
     log_entry(index, f"Graph auto connector for {index}", t2)
-    ans = getPathsforAllEntPairs(graph, entites, index)
+    ans = getPathsforAllEntPairs(graph, entitesOfClaim, entites, index)
     return ans
 
 
-def main(PATH, index=0):
-    graphData =  handleDataIngestion(PATH, index)
-    log_entry(index, f"Data retrived from graph for {index}", graphData)
+def main(claim, PATH, index=0):
+    graphData =  handleDataIngestion(claim, PATH, index)
+    log_entry(index, f"Data retrived from graph for GraphData {index}", graphData)
 
 if __name__ == "__main__":
-    main()
+    claim = "Hunter Biden had no experience in Ukraine or in the energy sector when he joined the board of Burisma."
+    PATH = selectData.getTrainAVeriTecData()
+    main(claim, PATH)

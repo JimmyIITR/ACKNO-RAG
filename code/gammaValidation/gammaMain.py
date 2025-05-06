@@ -106,7 +106,7 @@ def main(claim, index=1) -> str:
 
     for url in urls:
         # Stop early if all three have 7 items
-        if len(bm25_texts) >= 3 and len(tfidf_texts) >= 3 and len(sbert_texts) >= 3:
+        if len(bm25_texts) >= 1 and len(tfidf_texts) >= 1 and len(sbert_texts) >= 1:
             break
 
         time.sleep(2)  # throttle article fetches
@@ -120,14 +120,14 @@ def main(claim, index=1) -> str:
         scoresSBERT = SBERTGammaValidation.computeSbertScores(claim, [text], model=sbertModel)
         
         # Append only if above threshold and we still need more
-        if abs(scoresBM25)  >= BM25_THRESHOLD and len(bm25_texts) < 3:
+        if abs(scoresBM25)  >= BM25_THRESHOLD and len(bm25_texts) < 1:
             bm25_texts.append(text)
-        if scoresTFIDF >= TFIDF_THRESHOLD and len(tfidf_texts) < 3:
+        if scoresTFIDF >= TFIDF_THRESHOLD and len(tfidf_texts) < 1:
             tfidf_texts.append(text)
-        if scoresSBERT >= SBERT_THRESHOLD and len(sbert_texts) < 3:
+        if scoresSBERT >= SBERT_THRESHOLD and len(sbert_texts) < 1:
             sbert_texts.append(text)
 
-    if len(bm25_texts)  < 3 or len(tfidf_texts) < 3 or len(sbert_texts) < 3:
+    if len(bm25_texts)  < 1 or len(tfidf_texts) < 1 or len(sbert_texts) < 1:
         queryLog.log_entry(
             index,
             "Warning: fewer than 7 articles found for some methods",
