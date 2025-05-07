@@ -54,3 +54,7 @@ template = """Answer the question based only on the following context:
 Question: {question}
 Use natural language and be concise.
 Answer:"""
+
+summerizePrompt = ChatPromptTemplate.from_template(
+            "Summarize this into approx 5-6 paragraphs without losing important information and keep it natural and strictly paragraph only:\n\n{text}"
+        )

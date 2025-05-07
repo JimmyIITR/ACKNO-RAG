@@ -15,8 +15,9 @@ from datetime import datetime
 import selectData
 from langchain.schema import Document
 from selectData import tempFileFactText,tempFileFalseFactText,dataPath,llmModel,embeddingModel
-
+from tenacity import retry, stop_after_attempt, wait_random_exponential
 from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer, util
 
 load_dotenv()
 
@@ -26,6 +27,7 @@ FALSE_FACT_DATA = tempFileFalseFactText()
 DATA_PATH = dataPath()
 LLM_MODEL = llmModel()
 EMBEDDINGS_MODEL = embeddingModel()
+sbertModel = SentenceTransformer('all-MiniLM-L6-v2')
 
 
 nltk.download('punkt')
@@ -40,13 +42,25 @@ def loadData(dataPath):
     )
     return textSplitter.split_documents(documents=rawDocs)
 
+@retry(stop=stop_after_attempt(3), wait=wait_random_exponential(multiplier=1, min=4, max=10))
 def processLLM(docs):
     """Process documents to create LLM instance and graph documents"""
-    llm = ChatOllama(model=LLM_MODEL, temperature=0)
+    llm = ChatOllama(model=LLM_MODEL, temperature=0,request_timeout=300)
     graphTransformer = LLMGraphTransformer(llm=llm)
     graphDocs = graphTransformer.convert_to_graph_documents(docs)
     return llm, graphDocs
 
+def findCLosestPair(aList, bList, model_name=sbertModel)  -> list[str]:
+    model = SentenceTransformer(model_name)
+    a_embeddings = model.encode(aList, convert_to_tensor=True)
+    b_embeddings = model.encode(bList, convert_to_tensor=True)
+    cosine_scores = util.cos_sim(a_embeddings, b_embeddings)
+    results = []
+    for idx, a_item in enumerate(aList):
+        best_match_idx = cosine_scores[idx].argmax()
+        best_match = bList[best_match_idx]
+        results.append(best_match)
+    return results
 
 def processLLMFromText(text: str):
     doc = Document(page_content=text)
@@ -102,7 +116,9 @@ def handleDataIngestion(claim, PATH, index=0):
 
     llmModel, graphDocuments = processLLM(document)
     entites = getNodesListIDs(graphDocuments)
-  
+    
+    entitiesSelectedByClaim = findCLosestPair(entitesOfClaim, entites, sbertModel)
+
     log_entry(index, f"BERT data completed for {index}")
     log_entry(index, "Nodes data", data=entites)
 
@@ -135,13 +151,14 @@ def handleDataIngestion(claim, PATH, index=0):
     log_entry(index, f"Graph Setup for {index}", t1)
     t2 = queries.autoGraphConnector(graph)
     log_entry(index, f"Graph auto connector for {index}", t2)
-    ans = getPathsforAllEntPairs(graph, entitesOfClaim, entites, index)
+    ans = getPathsforAllEntPairs(graph, entitiesSelectedByClaim, entites, index)
     return ans
 
 
 def main(claim, PATH, index=0):
     graphData =  handleDataIngestion(claim, PATH, index)
     log_entry(index, f"Data retrived from graph for GraphData {index}", graphData)
+    return graphData
 
 if __name__ == "__main__":
     claim = "Hunter Biden had no experience in Ukraine or in the energy sector when he joined the board of Burisma."

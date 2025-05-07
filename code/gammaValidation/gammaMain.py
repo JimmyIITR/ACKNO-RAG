@@ -9,7 +9,7 @@ from os.path import dirname, join, abspath
 from dotenv import load_dotenv
 from serpapi import GoogleSearch
 from bs4 import BeautifulSoup
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, util
 
 sys.path.insert(0, abspath(join(dirname(__file__), '..')))
 
@@ -29,6 +29,7 @@ sbertModel = SentenceTransformer('all-MiniLM-L6-v2')
 BM25_THRESHOLD  = 4.06336433559004
 SBERT_THRESHOLD = 0.253111058547908
 TFIDF_THRESHOLD = 0.349314796641909
+
 
 def getSession():
     """

@@ -15,6 +15,7 @@ import selectData
 import splitClaim
 import pandas as pd
 import csv
+import os
 from gammaValidation import gammaMain
 from code.alphabetaValidation import abMain
 import queryLog
@@ -31,9 +32,17 @@ EMBEDDINGS_MODEL = selectData.embeddingModel()
 RESULT_PATH = selectData.finalCSV() #csv file
 DATA_PATH = selectData.getTrainAVeriTecData() #json file
 
+NEO4J_URI = os.getenv("NEO4J_URI_LOCAL")
+NEO4J_USER = os.getenv("NEO4J_USERNAME_LOCAL")
+NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD_LOCAL")
+
+
 def initializeEmbeddings():
     embeddingModel = OllamaEmbeddings(model=selectData.embeddingModel())
     vectorIndex = Neo4jVector.from_existing_graph(
+        url=NEO4J_URI,
+        username=NEO4J_USER,
+        password=NEO4J_PASSWORD,
         embedding=embeddingModel,
         search_type="hybrid",
         node_label="Document",
@@ -42,18 +51,35 @@ def initializeEmbeddings():
     )
     return vectorIndex.as_retriever()
 
-def retrieveContext(question, vectorRetriever, graphData):
+def summarize(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            original_text = file.read()
+
+        llm = ChatOllama(model=LLM_MODEL, temperature=0)
+        summarize_chain = prompts.summerizePrompt | llm | StrOutputParser()
+        
+        summary = summarize_chain.invoke({"text": original_text})
+        with open(file_path, 'w') as file:
+            file.write(summary)
+            
+        return summary
+    except Exception as e:
+        queryLog.log_entry("SUMMARIZER", "SUMMARIZE_FAIL", data=str(e), status="error")
+        return None
+
+def retrieveContext(question, vectorRetriever, graphData=None):
     vectorResults = [doc.page_content for doc in vectorRetriever.invoke(question)]
-    return f"""Graph Data:
-{graphData}
+    res = f"""Graph Data:
+        {graphData}
 
-Vector Data:
-{"#Document ".join(vectorResults)}"""
+        Vector Data:
+        {"#Document ".join(vectorResults)}"""
+    print(res)
+    return res
 
-def setupAnswerChain(graphData):
-    graph = queries.neo4j()
+def setupAnswerChain(graphData = None):
     llm = ChatOllama(model=selectData.llmModel(), temperature=0)
-    entityChain = llm.with_structured_output(prompts.Entities)
     vectorRetriever = initializeEmbeddings()
     promptTemplate = ChatPromptTemplate.from_template(prompts.template)
 
@@ -70,35 +96,72 @@ def setupAnswerChain(graphData):
     )
 
 def main():
-    df = pd.read_json(DATA_PATH)
+    try:
+        df = pd.read_json(DATA_PATH)
+        queryLog.log_entry("LOAD_DATA", "DATA_LOAD_SUCCESS", data={"rows": len(df)})
+    except Exception as e:
+        queryLog.log_entry("LOAD_DATA", "DATA_LOAD_FAIL", data=str(e), status="error")
+        return
 
-    with open(RESULT_PATH, 'w', newline='', encoding='utf-8') as outf:
-        writer = csv.writer(outf)
-        writer.writerow(['index', 'claim', 'response'])
+    try:
+        with open(RESULT_PATH, 'w', newline='', encoding='utf-8') as outf:
+            writer = csv.writer(outf)
+            writer.writerow(['index', 'claim', 'response'])
+        queryLog.log_entry("INIT_CSV", "CSV_INIT_SUCCESS", data={"path": RESULT_PATH})
+    except Exception as e:
+        queryLog.log_entry("INIT_CSV", "CSV_INIT_FAIL", data=str(e), status="error")
+        return
 
     for idx, row in df.iterrows():
-        claim = row['claim']
-        queryLog.log_entry(idx, "START claim", data=claim)
+        claim = row.get('claim', '')
+        queryLog.log_entry(idx, "CLAIM_PROCESS_START", data=claim)
 
-        atomicClaims = splitClaim.processParagraph(claim)
-        for sc in atomicClaims:
-            gammaMain.main(sc, idx)
+        try:
+            atomicClaims = splitClaim.processParagraph(claim)
+            for sc in atomicClaims:
+                gammaMain.main(sc, idx)
+            queryLog.log_entry(idx, "GAMMA_VALIDATION_SUCCESS", data={"count": len(atomicClaims)})
+        except Exception as e:
+            queryLog.log_entry(idx, "GAMMA_VALIDATION_FAIL", data=str(e), status="error")
 
-        queryLog.log_entry(idx, "Files Generated", data=None, status="info")
-        
-        graphData = abMain.main(claim, selectData.sbertDataPath(), idx)
+        try:
+            summary = summarize(SBERT_DATA_PATH)
+            if summary:
+                queryLog.log_entry(idx, "SBERT_SUMMARY_SUCCESS", data={"summary": summary[:200] + "..."})
+            else:
+                queryLog.log_entry(idx, "SBERT_SUMMARY_EMPTY", status="warning")
+        except Exception as e:
+            queryLog.log_entry(idx, "SBERT_SUMMARY_FAIL", data=str(e), status="error")
 
-        queryLog.log_entry(idx, "Graph generated", data=graphData, status="info")
-        
-        qaChain  = setupAnswerChain(graphData)
-        response = qaChain.invoke(claim)
+        try:
+            graphData = abMain.main(claim, SBERT_DATA_PATH, idx)
+            queryLog.log_entry(idx, "GRAPH_BUILD_SUCCESS", data=graphData)
+        except Exception as e:
+            queryLog.log_entry(idx, "GRAPH_BUILD_FAIL", data=str(e), status="error")
+            graphData = None
 
-        with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
-            writer = csv.writer(outf)
-            writer.writerow([idx, claim, response])
+        response = ""
+        if graphData is not None:
+            try:
+                qaChain = setupAnswerChain(graphData)
+                response = qaChain.invoke(claim)
+                queryLog.log_entry(idx, "QA_INVOKE_SUCCESS", data=response)
+            except Exception as e:
+                queryLog.log_entry(idx, "QA_INVOKE_FAIL", data=str(e), status="error")
+                response = f"ERROR during QA: {e}"
+        else:
+            response = "SKIPPED QA due to graph build failure."
+            queryLog.log_entry(idx, "QA_SKIPPED", data=response)
 
-        queryLog.log_entry(idx, "SAVED result", data=response, status="info")
+        try:
+            with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
+                writer = csv.writer(outf)
+                writer.writerow([idx, claim, response])
+            queryLog.log_entry(idx, "CSV_APPEND_SUCCESS", data={"response": response})
+        except Exception as e:
+            queryLog.log_entry(idx, "CSV_APPEND_FAIL", data=str(e), status="error")
 
+    queryLog.log_entry("MAIN_LOOP", "PROCESSING_COMPLETE", data={"output": RESULT_PATH})
     print("All done, results written to", RESULT_PATH)
 
 if __name__ == "__main__":
