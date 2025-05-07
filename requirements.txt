@@ -40,7 +40,7 @@ decorator==5.1.1
 Deprecated==1.2.18
 dill==0.3.8
 distro==1.9.0
-duckduckgo_search==7.4.2
+duckduckgo_search==8.0.1
 durationpy==0.9
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
 entrypoints==0.4
@@ -58,6 +58,7 @@ gitdb==4.0.12
 GitPython==3.1.44
 gliner==0.2.17
 google-auth==2.38.0
+google_search_results==2.4.2
 googleapis-common-protos==1.66.0
 grpcio==1.70.0
 h11==0.14.0
@@ -151,6 +152,7 @@ pillow==11.1.0
 platformdirs==4.3.6
 posthog==3.11.0
 preshed==3.0.9
+primp==0.15.0
 prompt_toolkit==3.0.50
 propcache==0.2.1
 protobuf==5.29.3
