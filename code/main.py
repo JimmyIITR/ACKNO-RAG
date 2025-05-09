@@ -95,6 +95,9 @@ def setupAnswerChain(graphData = None):
         | StrOutputParser()
     )
 
+def remove_commas(text):
+    return text.replace(",", "")
+
 def main():
     try:
         df = pd.read_json(DATA_PATH)
@@ -104,16 +107,17 @@ def main():
         return
 
     try:
-        with open(RESULT_PATH, 'w', newline='', encoding='utf-8') as outf:
+        with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
             writer = csv.writer(outf)
-            writer.writerow(['index', 'claim', 'response'])
+            writer.writerow(['index', 'claim', 'response','label'])
         queryLog.log_entry("INIT_CSV", "CSV_INIT_SUCCESS", data={"path": RESULT_PATH})
     except Exception as e:
         queryLog.log_entry("INIT_CSV", "CSV_INIT_FAIL", data=str(e), status="error")
         return
 
-    for idx, row in df.iterrows():
+    for idx, row in df.iloc[216:].iterrows():
         claim = row.get('claim', '')
+        label = row.get('label', '')
         queryLog.log_entry(idx, "CLAIM_PROCESS_START", data=claim)
 
         try:
@@ -135,7 +139,7 @@ def main():
 
         try:
             graphData = abMain.main(claim, SBERT_DATA_PATH, idx)
-            queryLog.log_entry(idx, "GRAPH_BUILD_SUCCESS", data=graphData)
+            queryLog.log_entry(idx, "GRAPH_BUILD_SUCCESS", data={"summary": graphData[:200] + "..."})
         except Exception as e:
             queryLog.log_entry(idx, "GRAPH_BUILD_FAIL", data=str(e), status="error")
             graphData = None
@@ -156,7 +160,7 @@ def main():
         try:
             with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
                 writer = csv.writer(outf)
-                writer.writerow([idx, claim, response])
+                writer.writerow([idx, claim, remove_commas(response), label])
             queryLog.log_entry(idx, "CSV_APPEND_SUCCESS", data={"response": response})
         except Exception as e:
             queryLog.log_entry(idx, "CSV_APPEND_FAIL", data=str(e), status="error")

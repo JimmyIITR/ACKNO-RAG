@@ -11,7 +11,7 @@ def loadData() -> List[Dict]:
     return data
 
 def loadTestData() -> List[Dict]:
-    with open(TESTDATAPATH, 'r') as file:
+    with open(TRAINDATAPATH, 'r') as file:
         data = json.load(file)
     return data
 

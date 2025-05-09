@@ -50,8 +50,7 @@ def processLLM(docs):
     graphDocs = graphTransformer.convert_to_graph_documents(docs)
     return llm, graphDocs
 
-def findCLosestPair(aList, bList, model_name=sbertModel)  -> list[str]:
-    model = SentenceTransformer(model_name)
+def findCLosestPair(aList, bList, model=sbertModel)  -> list[str]:
     a_embeddings = model.encode(aList, convert_to_tensor=True)
     b_embeddings = model.encode(bList, convert_to_tensor=True)
     cosine_scores = util.cos_sim(a_embeddings, b_embeddings)
@@ -162,5 +161,5 @@ def main(claim, PATH, index=0):
 
 if __name__ == "__main__":
     claim = "Hunter Biden had no experience in Ukraine or in the energy sector when he joined the board of Burisma."
-    PATH = selectData.getTrainAVeriTecData()
+    PATH = selectData.sbertDataPath()
     main(claim, PATH)

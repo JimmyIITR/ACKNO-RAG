@@ -151,7 +151,7 @@ def getTwoEntpaths(en1: str, en2: str, combinedNodesName: List[str], graph) -> s
     try:
         response = graph.query(
             """
-            MATCH path = shortestPath((a)-[*..7]-(b))
+            MATCH path = (a)-[*..7]-(b)
             WHERE a.id = $id1 AND b.id = $id2
             WITH nodes(path) AS nodes, relationships(path) AS rels
             RETURN 
