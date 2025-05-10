@@ -1,5 +1,6 @@
 import json
 from typing import List, Dict, Tuple
+import random
 
 VALIDATIONDATAPATH = "data/AVeriTeCData/dataDev.json"
 TRAINDATAPATH = "data/AVeriTecData/dataTrain.json"
@@ -147,6 +148,38 @@ def getTestDataCrossAndSelfURLsWithClaims(k) -> Tuple[List[Tuple[str, str]], Lis
     
     return result
 
+def getKCrossAndSelfURLsWithClaimsRandom(k) -> Tuple[List[Tuple[str, str]], List[Tuple[str, str]]]:
+    data = loadData()
+    result = []
+    
+    for claim_data in data:
+        if not (claim_data.get('claim') and claim_data.get('fact_checking_article')):
+            continue
+            
+        related_articles = []
+        for other_claim in data:
+            if (other_claim['claim'] != claim_data['claim'] and 
+                other_claim.get('fact_checking_article') and 
+                other_claim['fact_checking_article'] != claim_data['fact_checking_article']):
+                related_articles.append({
+                    'related_claim': other_claim['claim'],
+                    'fact_checking_article': other_claim['fact_checking_article'],
+                })
+            if len(related_articles) == k:
+                break
+                
+        claim_set = {
+            "main_claim": {
+                "text": claim_data['claim'],
+                "fact_checking_article": claim_data['fact_checking_article']
+            },
+            "related_articles": related_articles
+        }
+        
+        result.append(claim_set)
+    
+    return result[random.randint(0, 499)]
+
 def main():
     # urls = getURLS()
     # print(f"Total number of fact checking URLs: {len(urls)}")
@@ -160,8 +193,8 @@ def main():
     # for verdict, count in verdict_dist.items():
     #     print(f"{verdict}: {count}")
     
-    result = getCrossAndSelfURLsWithClaims(5)
-    print(result[0])
+    result = getKCrossAndSelfURLsWithClaimsRandom(5)
+    print(result)
 
 if __name__ == "__main__":
     main()
