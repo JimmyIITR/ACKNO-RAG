@@ -115,7 +115,7 @@ def main():
         queryLog.log_entry("INIT_CSV", "CSV_INIT_FAIL", data=str(e), status="error")
         return
 
-    for idx, row in df.iloc[216:].iterrows():
+    for idx, row in df.iloc[513:].iterrows():
         claim = row.get('claim', '')
         label = row.get('label', '')
         queryLog.log_entry(idx, "CLAIM_PROCESS_START", data=claim)
@@ -160,7 +160,7 @@ def main():
         try:
             with open(RESULT_PATH, 'a', newline='', encoding='utf-8') as outf:
                 writer = csv.writer(outf)
-                writer.writerow([idx, claim, remove_commas(response), label])
+                writer.writerow([idx, remove_commas(claim), remove_commas(response), label])
             queryLog.log_entry(idx, "CSV_APPEND_SUCCESS", data={"response": response})
         except Exception as e:
             queryLog.log_entry(idx, "CSV_APPEND_FAIL", data=str(e), status="error")
