@@ -16,7 +16,7 @@ import splitClaim
 import pandas as pd
 import csv
 import os
-from gammaValidation import gammaMain
+from gammaValidation import gammaMainBrave
 from code.alphabetaValidation import abMain
 import queryLog
 
@@ -115,7 +115,7 @@ def main():
         queryLog.log_entry("INIT_CSV", "CSV_INIT_FAIL", data=str(e), status="error")
         return
 
-    for idx, row in df.iloc[513:].iterrows():
+    for idx, row in df.iloc[548:].iterrows():
         claim = row.get('claim', '')
         label = row.get('label', '')
         queryLog.log_entry(idx, "CLAIM_PROCESS_START", data=claim)
@@ -123,7 +123,7 @@ def main():
         try:
             atomicClaims = splitClaim.processParagraph(claim)
             for sc in atomicClaims:
-                gammaMain.main(sc, idx)
+                gammaMainBrave.main(sc, idx)
             queryLog.log_entry(idx, "GAMMA_VALIDATION_SUCCESS", data={"count": len(atomicClaims)})
         except Exception as e:
             queryLog.log_entry(idx, "GAMMA_VALIDATION_FAIL", data=str(e), status="error")

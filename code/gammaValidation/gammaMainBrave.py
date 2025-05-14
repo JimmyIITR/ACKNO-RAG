@@ -11,7 +11,6 @@ from bs4 import BeautifulSoup
 from sentence_transformers import SentenceTransformer, util
 from urllib.parse import urlparse
 sys.path.insert(0, abspath(join(dirname(__file__), '..')))
-from duckduckgo_search import DDGS
 from gammaValidation import BM25GammaValidation, SBERTGammaValidation, TFIDFGammaValidation
 import queryLog
 
@@ -34,9 +33,11 @@ SOCIAL_MEDIA_DOMAINS = {
     'flickr.com', 'vk.com', 'quora.com'
 }
 
+BRAVE_API_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+BRAVE_API_KEY = os.getenv("BRAVE_API_KEY")
+
 def is_social_media(url):
     """Check if URL belongs to social media domain"""
-    from urllib.parse import urlparse
     try:
         domain = urlparse(url).netloc.lower()
         return any(sm_domain in domain for sm_domain in SOCIAL_MEDIA_DOMAINS)
@@ -61,36 +62,51 @@ def getSession():
     session.mount("https://", adapter)
     return session
 
-def get_top_urls_ddg(query, session, num_results=1):
+def get_top_urls_brave(query, session, num_results=3):
     """
-    Fetch top URLs from DuckDuckGo (non-social, non-doc).
+    Fetch top URLs from Brave Search API (non-social, non-doc)
     """
     try:
+        if not BRAVE_API_KEY:
+            raise ValueError("BRAVE_API_KEY not found in environment variables")
+
+        headers = {
+            "X-Subscription-Token": BRAVE_API_KEY,
+            "Accept": "application/json"
+        }
+
+        params = {
+            "q": query,
+            "count": num_results,
+            "safesearch": "moderate",
+            "freshness": "pd"
+        }
+
+        response = session.get(BRAVE_API_ENDPOINT, headers=headers, params=params)
+        response.raise_for_status()
+        
         urls = []
         seen = set()
+        results = response.json().get('web', {}).get('results', [])
 
-        with DDGS() as ddgs:
-            results = ddgs.text(query, max_results=num_results)
-            time.sleep(2)
-            for result in results:
-                time.sleep(2)
-                url = result.get('href') or result.get('url')
-                if not url:
-                    continue
+        for result in results:
+            url = result.get('url')
+            if not url:
+                continue
 
-                parsed = urlparse(url)
-                clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+            parsed = urlparse(url)
+            clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
 
-                if (clean_url not in seen and 
-                    not is_social_media(clean_url) and 
-                    not clean_url.endswith(('.pdf', '.doc', '.docx'))):
-                    seen.add(clean_url)
-                    urls.append(clean_url)
+            if (clean_url not in seen and 
+                not is_social_media(clean_url) and 
+                not clean_url.endswith(('.pdf', '.doc', '.docx'))):
+                seen.add(clean_url)
+                urls.append(clean_url)
 
         return urls[:num_results]
 
     except Exception as e:
-        print(f"Error fetching from DuckDuckGo: {str(e)}")
+        print(f"Error fetching from Brave API: {str(e)}")
         return []
 
 def fetchArticleText(url, session):
@@ -106,15 +122,12 @@ def fetchArticleText(url, session):
         print(f"Error fetching {url}: {e}")
         return ""
 
-def tokenize(text):
-    return nltk.word_tokenize(text)
-
 def main(claim, index=1) -> str:
     session = getSession()
     queryLog.log_entry(index, "Starting URL fetch", data=claim)
 
     try:
-        urls = get_top_urls_ddg(claim, session, num_results=3)
+        urls = get_top_urls_brave(claim, session, num_results=3)
         if not urls:
             queryLog.log_entry(index, "No URLs found after filtering", status="warning")
             return "Error: No valid URLs found after social media filtering"
@@ -122,25 +135,21 @@ def main(claim, index=1) -> str:
         queryLog.log_entry(index, "Filtered URLs", data=urls, status="info")
         queryLog.log_entry(index, "Fetching articles...", status="info")
 
-        # Prepare lists to hold up to 7 successful texts per method
         bm25_texts, tfidf_texts, sbert_texts = [], [], []
 
         for url in urls:
-            # Stop early if all three have 7 items
             if len(bm25_texts) >= 1 and len(tfidf_texts) >= 1 and len(sbert_texts) >= 1:
                 break
 
-            time.sleep(2)  # throttle article fetches
+            time.sleep(1)  # Brave API rate limit compliance
             text = fetchArticleText(url, session)
             if not text:
                 continue
 
-            # Compute scores
             scoresBM25  = BM25GammaValidation.compute_bm25_scores(claim, [text])
             scoresTFIDF = TFIDFGammaValidation.computeTfIdfScores(claim, [text])
             scoresSBERT = SBERTGammaValidation.computeSbertScores(claim, [text], model=sbertModel)
             
-            # Append only if above threshold and we still need more
             if abs(scoresBM25)  >= BM25_THRESHOLD and len(bm25_texts) < 1:
                 bm25_texts.append(text)
             if scoresTFIDF >= TFIDF_THRESHOLD and len(tfidf_texts) < 1:
@@ -151,7 +160,7 @@ def main(claim, index=1) -> str:
         if len(bm25_texts)  < 1 or len(tfidf_texts) < 1 or len(sbert_texts) < 1:
             queryLog.log_entry(
                 index,
-                "Warning: fewer than 7 articles found for some methods",
+                "Warning: fewer than required articles found",
                 data={
                     "bm25": len(bm25_texts),
                     "tfidf": len(tfidf_texts),
@@ -160,7 +169,6 @@ def main(claim, index=1) -> str:
                 status="warning"
             )
 
-        # Write exactly 7 (or fewer, if not found) to each file
         base = abspath(join(dirname(__file__), "../dataBase/temp/gammaExtrected"))
         with open(join(base, "BM25.txt"),  "a", encoding="utf-8") as f:
             f.write("\n\n".join(bm25_texts))
@@ -174,7 +182,6 @@ def main(claim, index=1) -> str:
     except Exception as e:
         queryLog.log_entry(index, "Critical Error", data=str(e), status="critical")
         return f"Error: {str(e)}"
-
 
 if __name__ == "__main__":
     claim = "The government announced a major tax cut in 2024."
