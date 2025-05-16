@@ -95,8 +95,10 @@ def setupAnswerChain(graphData = None):
         | StrOutputParser()
     )
 
-def remove_commas(text):
-    return text.replace(",", "")
+def remove_commas(text: str) -> str:
+    no_commas = text.replace(",", "")
+    single_line = no_commas.replace("\n", " ").replace("\r", "")
+    return " ".join(single_line.split())
 
 def main():
     try:
@@ -115,7 +117,7 @@ def main():
         queryLog.log_entry("INIT_CSV", "CSV_INIT_FAIL", data=str(e), status="error")
         return
 
-    for idx, row in df.iloc[548:].iterrows():
+    for idx, row in df.iloc[931:].iterrows():
         claim = row.get('claim', '')
         label = row.get('label', '')
         queryLog.log_entry(idx, "CLAIM_PROCESS_START", data=claim)
